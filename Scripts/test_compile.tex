@@ -1,0 +1,21 @@
+\documentclass[a4paper,11pt]{article}
+\usepackage{amsmath}
+\usepackage{physics}
+\begin{document}
+
+したがって、スピン和をサイトごとに独立に実行でき、
+\begin{equation}
+\begin{aligned}
+\sum_{\{\sigma^a\}} \exp\Bigl(\frac{1}{2} \tilde{q} \sum_{i=1}^N (\sum_a \sigma_i^a)^2 \Bigr)
+&= \prod_{i=1}^N \sum_{\{\sigma^a\}} \int Dz \prod_{a=1}^n \exp(z \sqrt{\tilde{q}} \sigma_i^a) \\[1ex]
+&= \prod_{i=1}^N \int Dz \prod_{a=1}^n \Bigl( \sum_{\sigma^a = \pm 1} \exp(z \sqrt{\tilde{q}} \sigma^a) \Bigr) \\[1ex]
+&= \prod_{i=1}^N \int Dz \, (2 \cosh(z \sqrt{\tilde{q}}))^n \\[1ex]
+&= \prod_{i=1}^N \int Dz \, \exp\Bigl( n \log\bigl(2 \cosh(z \sqrt{\tilde{q}})\bigr) \Bigr) \\[1ex]
+&\approx \prod_{i=1}^N \biggl( 1 + n \int Dz \, \log\bigl(2 \cosh(z \sqrt{\tilde{q}})\bigr) \biggr) \\[1ex]
+&= \exp\Bigl( N \log\bigl(1 + n \int Dz \, \log\bigl(2 \cosh(z \sqrt{\tilde{q}})\bigr)\bigr) \Bigr) \\[1ex]
+&\approx \exp\Bigl( n N \int Dz \, \log\bigl(2 \cosh(z \sqrt{\tilde{q}})\bigr) \Bigr) \quad (n \to 0)
+\end{aligned}
+\end{equation}
+を得る。ここで最後の近似は$n\to 0$の極限で$\log(1+nx) \approx nx$を用いた。
+
+\end{document}

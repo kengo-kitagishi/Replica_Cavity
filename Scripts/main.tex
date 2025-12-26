@@ -1,0 +1,2421 @@
+\documentclass[a4paper,11pt]{article}
+\usepackage{amsmath}    % amsmath は OK
+\usepackage{physics}    % \dd など
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{microtype}
+\usepackage{mathtools}
+
+% =========================================
+% XeLaTeX 用フォント・日本語設定
+% =========================================
+\usepackage{fontspec}
+\usepackage{xeCJK}          % 日本語用
+\usepackage{unicode-math}   % Unicode 数学フォント
+
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta}
+\usetikzlibrary{calc}
+\usetikzlibrary{shapes,positioning}
+
+% Pythonコード用パッケージ
+\usepackage{listings}
+\usepackage{xcolor}
+
+% Pythonコードのスタイル設定
+\lstset{
+  language=Python,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{gray}\itshape,
+  stringstyle=\color{red},
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  stepnumber=1,
+  numbersep=5pt,
+  backgroundcolor=\color{white},
+  showspaces=false,
+  showstringspaces=false,
+  showtabs=false,
+  frame=single,
+  rulecolor=\color{black},
+  tabsize=4,
+  breaklines=true,
+  breakatwhitespace=false,
+  title=\lstname,
+  escapeinside={(*@}{@*)},
+  captionpos=b
+}
+% --- 英文フォント ---
+\setmainfont{Times New Roman}
+\setsansfont{Arial}
+\setmonofont{Courier New}
+
+% --- 日本語フォント ---
+\setCJKmainfont{IPAexMincho}
+\setCJKsansfont{IPAexGothic}
+\setCJKmonofont{IPAGothic}
+
+% --- 数学フォント ---
+\setmathfont{Latin Modern Math}
+
+% =========================================
+% 基本パッケージ
+% =========================================
+
+% 物理パッケージとの \dd 衝突回避
+\renewcommand{\dd}{\mathrm{d}}
+
+% ハイパーリンク色
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  urlcolor=blue,
+  citecolor=black
+}
+
+% 余白
+\geometry{margin=25mm}
+
+% 行間
+\renewcommand{\baselinestretch}{1.1}
+
+% 数式番号（セクションごと）
+\numberwithin{equation}{section}
+
+% =========================================
+% タイトル
+% =========================================
+\title{スピングラス理論と統計力学的推論アルゴリズムの解析}
+\author{大宮夏輝 J1240006}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{序論}
+本レポートは、統計力学的手法を用いた推論の理論的な枠組みと、コミュニティ検出問題における数値実験の結果をまとめたものである。第1節ではSherrington-Kirkpatrick模型におけるレプリカ法の基礎としてレプリカ対称解および1-Step Replica Symmetry Breaking解を記述する。第2節ではBelief Propagation、TAP方程式、および状態発展法の一般的な理論的枠組みをまとめた。ここではそれぞれのアプローチの関係性、つまり、BPにおける更新式はBethe自由エネルギーの鞍点方程式に対応し、TAP方程式はOnsager反跳項を含む自己無撞着方程式として導出され、大規模極限において状態発展方程式に収束し、状態発展法はレプリカ対称解の秩序パラメータと一致することをみる。
+第3節ではこれらの理論的枠組みをRidge回帰、LASSO回帰、さらにStochastic Block Modelにおけるコミュニティ検出問題を希薄スピングラス模型として定式化し、BP、TAP、状態発展法の3つの手法による数値解析を通じて、Kesten-Stigum検出可能性閾値の周辺での相転移現象を確かめる。
+
+\section{SK模型とレプリカ法}
+\subsection{SK模型の定義}
+SK模型は $N$ 個の Ising スピン 
+$\sigma_i \in \{\pm 1\}$ ($i=1,\dots,N$) に対して
+\begin{equation}
+    H(\boldsymbol{\sigma}) = - \sum_{1 \le i < j \le N} J_{ij}\,\sigma_i \sigma_j
+    \label{eq:SK-Hamiltonian}
+\end{equation}
+と定義される。結合 $J_{ij}$ は独立に分布するガウス乱数であり、
+\begin{equation}
+    J_{ij} \sim \mathcal{N}\Bigl(0, \frac{1}{N}\Bigr), \qquad
+    J_{ij} = J_{ji}, \quad J_{ii} = 0
+\end{equation}
+というスケーリングを採用する。この $1/N$ スケーリングにより 
+エネルギー $H$ は $O(N)$ の大きさをもち示量性を持つモデルになっており、熱力学極限 $N \to \infty$ において 1 スピンあたりの自由エネルギーは有界になるという物理的な要請を満たしている。
+
+温度 $T = 1/\beta$ における分配関数は
+\begin{equation}
+\begin{aligned}
+    Z_J 
+    &= \sum_{\{\sigma\}} \exp\bigl(-\beta H(\boldsymbol{\sigma})\bigr) \\
+    &= \sum_{\{\sigma\}} 
+       \exp\Bigl(
+           \beta \sum_{1 \le i < j \le N} J_{ij}\, \sigma_i \sigma_j
+       \Bigr)
+\end{aligned}
+\end{equation}
+
+自己平均性より、乱雑な結合に対する平均自由エネルギー密度 $f(\beta)$ を
+\begin{equation}
+    f(\beta) = - \frac{1}{\beta N} \, \mathbb{E}_J[\log Z_J]
+\end{equation}
+と定義して計算する。ここで $\mathbb{E}_J[\cdots]$ は $J_{ij}$ に関するガウス平均を表す。
+
+\subsection{レプリカ法}
+レプリカトリック
+\begin{equation}
+    \mathbb{E}_J[\log Z_J] = \lim_{n \to 0} 
+    \frac{\mathbb{E}_J[Z_J^n] - 1}{n}
+\end{equation}
+を用いる。ここで $n$ を形式的に自然数として導入し、$n$ 個のレプリカ 
+$\{\sigma^a\}$ ($a=1,\dots,n$) を導入する。このとき、
+\begin{equation}
+\begin{aligned}
+    \mathbb{E}_J[Z_J^n] 
+    &= \sum_{\{\sigma^a\}} 
+       \mathbb{E}_J \Biggl[
+           \exp \Bigl(
+               \beta \sum_{i<j} J_{ij} \sum_{a=1}^n \sigma_i^a \sigma_j^a
+           \Bigr)
+       \Biggr]
+\end{aligned}
+\end{equation}
+$J_{ij}$は平均$0$,分散$1/N$のガウス乱数であるから、
+\begin{equation}
+\begin{aligned}
+    \mathbb{E}_J\Bigl[
+        \exp\Bigl(
+            \beta J_{ij} \sum_a \sigma_i^a \sigma_j^a
+        \Bigr)
+    \Bigr]
+    &\propto
+    \int dJ_{ij} \,
+    \exp\Bigl(
+        - \frac{N}{2J^2} J_{ij}^2
+        + \beta J_{ij} \sum_a \sigma_i^a \sigma_j^a
+    \Bigr) \\
+    &= 
+    \int dJ_{ij} \,
+    \exp\Bigl(
+        - \frac{N}{2J^2} \Bigl(J_{ij} - \frac{\beta J^2}{N}\sum_a \sigma_i^a \sigma_j^a \Bigr)^2
+        + \frac{N}{2J^2} \Bigl( \frac{\beta J^2}{N} \sum_a \sigma_i^a \sigma_j^a \Bigr)^2
+    \Bigr) \\
+    &= \exp\Bigl(
+        \frac{\beta^2 J^2}{2N} \Bigl(\sum_a \sigma_i^a \sigma_j^a \Bigr)
+        \Bigl(\sum_b \sigma_i^b \sigma_j^b \Bigr)
+    \Bigr)
+\end{aligned}
+\end{equation}
+を得る。この結果を全ての結合対$(i,j)$について用いると、
+
+\begin{equation}
+\begin{aligned}
+    \mathbb{E}_J\bigl[Z_J^n\bigr]
+    &= \sum_{\{\sigma^a\}}
+       \prod_{i\ne j}
+       \exp\left(
+           \frac{\beta^2 J^2}{2N}
+           \sum_{a,b} 
+               \sigma_i^a\sigma_j^a
+               \sigma_i^b\sigma_j^b
+       \right)
+\\
+    &= \sum_{\{\sigma^a\}}
+       \exp\left(
+           \frac{\beta^2 J^2}{2N}
+           \sum_{a,b}
+           \sum_{i\ne j}
+                \sigma_i^a\sigma_i^b
+                \sigma_j^a\sigma_j^b
+       \right)
+\\
+    &= \sum_{\{\sigma^a\}}
+       \exp\left(
+           \frac{\beta^2 J^2}{2N}
+           \sum_{a,b}
+               \left( \sum_{i=1}^N \sigma_i^a\sigma_i^b \right)^2
+           \;-\;
+           \frac{n^2\beta^2 J^2}{2}
+       \right).
+\end{aligned}
+\end{equation}
+第二項は$N$に対して$O(1)$であり無視できる。ここで秩序パラメータ$q_{ab} = \frac{1}{N}\sum_i \sigma_i^a\sigma_i^b$を導入すると、
+\begin{equation}
+\begin{aligned}
+    \mathbb{E}_J\bigl[Z_J^n\bigr]
+    &= \sum_{\{\sigma^a\}}
+       \exp\left(
+           \frac{\beta^2 J^2}{2N}
+           \sum_{a,b}
+               \left( \sum_{i=1}^N \sigma_i^a\sigma_i^b \right)^2
+       \right).
+\\
+    &= \sum_{\{\sigma^a\}}
+        \exp \left(
+            \frac{N\beta^2J^2}{2}
+            (\frac{1}{N} \sum_{i=1}^N \sigma_i^a\sigma_i^b)
+        \right)
+\\
+    &= \sum_{\{\sigma^a\}}\int dQ\exp(\frac{N\beta^2J^2}{2}\sum_{a,b}q_{ab}^2)\delta(Nq^{ab} - \sum_i \sigma_i^a\sigma_i^b)
+\\
+    &= \int dQ \exp(N(-\beta e(Q))+S(Q))
+\\
+    &\approx \exp(N(-\beta e(Q))+S(Q))    
+\end{aligned}
+\end{equation}
+と書ける。ここで$e(Q)$はエネルギー項、$S(Q)$はエントロピー項を表す。$N\to\infty$の極限では鞍点法により主要な寄与が決まる。
+
+以下、エントロピー項を計算する。デルタ関数をフーリエ表示すると、
+\begin{equation}
+\begin{aligned}
+    e^{NS(Q)}
+    &= \sum_{\{\sigma^a\}}
+        \prod_{a,b} 
+        \delta\Biggl(N q_{ab} - \sum_{i=1}^N \sigma_i^a \sigma_i^b\Biggr) \\[2mm]
+    &= \int d\tilde{Q}\sum_{\{\sigma^a\}}
+    \exp\Biggl[
+        - N\sum_{a,b}\frac{q_{ab}\tilde{q}_{ab}}{2}
+        + \frac{1}{2}\sum_{a,b}\tilde{q}_{ab}\sum_{i=1}^N\sigma_i^a\sigma_i^b\Biggr]
+\end{aligned}
+\end{equation}
+となる。
+
+\subsection{レプリカ対称解と自由エネルギー}
+レプリカ対称性(RS)の仮定では、全てのレプリカは対等であると考える。
+この仮定の下で、重なり行列$q_{ab}$は
+\begin{equation}
+q_{ab}^{\mathrm{(RS)}} = 
+\begin{cases}
+1, & a=b, \\[1ex]
+q,&a\neq b,
+\end{cases}
+\end{equation}
+\begin{equation}
+\tilde{q}_{ab}^{\mathrm{(RS)}} = 
+\begin{cases}
+\tilde{Q}, & a=b, \\[1ex]
+\tilde{q},& a\neq b,
+\end{cases}
+\label{eq:RS-ansatz}
+\end{equation}
+とパラメータ化する。ここで$q$は異なるレプリカ間の重なりを表す秩序パラメータである。
+共役変数$\tilde{q}_{ab}$についても同様の対称性を仮定する。
+
+この対称性を用いると、第二項の有効相互作用は
+\begin{equation}
+\begin{aligned}
+\frac{1}{2} \sum_{a,b} \tilde{q}_{ab} \sum_{i=1}^N \sigma_i^a \sigma_i^b
+&= \frac{1}{2} \tilde{Q} \sum_{a=1}^n \sum_{i=1}^N (\sigma_i^a)^2
+   + \frac{1}{2} \tilde{q} \sum_{a \neq b} \sum_{i=1}^N \sigma_i^a \sigma_i^b \\[1ex]
+&= \frac{1}{2} n N \tilde{Q} 
+   + \frac{1}{2} \tilde{q} \sum_{i=1}^N 
+     \Biggl[ \Bigl( \sum_{a=1}^n \sigma_i^a \Bigr)^2 - \sum_{a=1}^n (\sigma_i^a)^2 \Biggr].
+\end{aligned}
+\end{equation}
+と変形できる。
+
+ここで、ハバード・ストラトノビッチ変換を用いてガウス積分に変換する。
+これにより、サイト間の相互作用を独立な一体問題に帰着される。
+\begin{equation}
+\begin{aligned}
+\exp\Bigl(\frac{1}{2}\tilde{q} (\sum_a \sigma_i^a)^2\Bigr)
+&= \int \frac{dz}{\sqrt{2\pi}} \exp\Bigl(-\frac{1}{2} z^2 + z \sqrt{\tilde{q}} \sum_a \sigma_i^a \Bigr) \\[1ex]
+&= \int \mathrm{D}z \, \exp\Bigl( z \sqrt{\tilde{q}} \sum_a \sigma_i^a \Bigr), 
+\end{aligned}
+\end{equation}
+が成り立つ。
+
+したがって、スピン和をサイトごとに独立に実行でき、
+\begin{equation}
+\begin{aligned}
+\sum_{\{\sigma^a\}} \exp\Bigl(\frac{1}{2} \tilde{q} \sum_{i=1}^N (\sum_a \sigma_i^a)^2 \Bigr)
+&= \prod_{i=1}^N \sum_{\{\sigma^a\}} \int \mathrm{D}z \prod_{a=1}^n \exp(z \sqrt{\tilde{q}} \sigma_i^a) \\[1ex]
+&= \prod_{i=1}^N \int \mathrm{D}z \prod_{a=1}^n \Bigl( \sum_{\sigma^a = \pm 1} \exp(z \sqrt{\tilde{q}} \sigma^a) \Bigr) \\[1ex]
+&= \prod_{i=1}^N \int \mathrm{D}z \, (2 \cosh(z \sqrt{\tilde{q}}))^n \\[1ex]
+&= \prod_{i=1}^N \int \mathrm{D}z \, \exp\Bigl( n \log\bigl(2 \cosh(z \sqrt{\tilde{q}})\bigr) \Bigr) \\[1ex]
+&\approx \prod_{i=1}^N \biggl( 1 + n \int \mathrm{D}z \, \log\bigl(2 \cosh(z \sqrt{\tilde{q}})\bigr) \biggr) \\[1ex]
+&= \exp\Bigl( N \log\bigl(1 + n \int \mathrm{D}z \, \log\bigl(2 \cosh(z \sqrt{\tilde{q}})\bigr)\bigr) \Bigr) \\[1ex]
+&\approx \exp\Bigl( n N \int \mathrm{D}z \, \log\bigl(2 \cosh(z \sqrt{\tilde{q}})\bigr) \Bigr) \quad (n \to 0)
+\end{aligned}
+\end{equation}
+を得る。ここで最後の近似は$n\to 0$の極限で$\log(1+nx) \approx nx$を用いた。
+
+以上の結果をまとめると、
+\begin{equation}
+\begin{aligned}
+\exp(N S(Q)) 
+&= \int d\tilde{Q} \sum_{\{\sigma^a\}} 
+\exp\Biggl[
+    -\frac{N}{2} \sum_{a,b} q_{ab} \tilde{q}_{ab} 
+    + \frac{1}{2} n N \tilde{Q} 
+    - \frac{N}{2}nq
+    + \frac{1}{2} \tilde{q} \sum_{i=1}^N (\sum_a \sigma_i^a)^2
+\Biggr] \\[1ex]
+&= \int d\tilde{Q} \,
+   \exp\Biggl[
+       -\frac{N}{2} \bigl( n \tilde{Q} + n(n-1) q \tilde{q} \bigr)
+       + \frac{N}{2} n \tilde{Q}
+       - \frac{N}{2}nq
+       + n N \int \mathrm{D}z \, \log \bigl( 2 \cosh(z \sqrt{\tilde{q}}) \bigr)
+   \Biggr] \\[1ex]
+&= \int d\tilde{Q} \, \exp\Bigl( N f(\tilde{Q}) \Bigr)
+\end{aligned}
+\end{equation}
+となる。鞍点方程式$\partial f/\partial \tilde{q} = 0$を解くことで、自己無撞着方程式が得られ、
+\begin{equation}
+\begin{aligned}
+f(\tilde{Q})
+&= \frac{n}{2}q\tilde{q}- \frac{n}{2}\tilde{q}+n\int \mathrm{D}z \, \log \bigl(2 \cosh(z \sqrt{\tilde{q}}) \bigr) \\
+f'(\tilde{Q}) 
+&= \frac{n}{2}(q-1) + n\int \mathrm{D}z \, \tanh(z\sqrt{\tilde{q}})\frac{z}{2\sqrt{\tilde{q}}} \\
+&= \frac{n}{2}(q-1) + \frac{n}{2}\int \mathrm{D}z \bigl(1-\tanh^2(z\sqrt{\tilde{q}})\bigr) \\
+q 
+&= \int \mathrm{D}z \, \tanh^2(z\sqrt{\tilde{q}})
+\end{aligned}
+\end{equation}
+
+同様の計算により、
+\begin{equation}
+\begin{aligned}
+\mathbb{E}_J[Z^n] 
+&= \int dQ \exp\left(N\frac{\beta^2J^2}{2}\bigl[q^2n(n-1)+n\bigr]+ N\left(-\frac{n}{2}(1-q)\tilde{q}+n\int \mathrm{D}z \, \log\bigl( 2 \cosh(z \sqrt{\tilde{q}}) \bigr)\right)\right) \\
+&\approx \exp(N f(Q))
+\end{aligned}
+\end{equation}
+ここで
+\begin{equation}
+\begin{aligned}
+f(Q)
+&= \frac{\beta^2 J^2}{2} n (1 - q^2)
+ - \frac{1}{2} n (1 - q) \tilde{q}
+ + n \int \mathrm{D}z \, \log\bigl( 2 \cosh(z \sqrt{\tilde{q}}) \bigr)
+\end{aligned}
+\end{equation}
+鞍点方程式$\partial f/\partial q = 0$より、
+\begin{equation}
+\begin{aligned}
+\frac{\partial f}{\partial q}
+&= - \beta^2 J^2 q + \frac{1}{2} \tilde{q} = 0 \\
+\tilde{q}
+&= 2 \beta^2 J^2 q \\
+q
+&= \int \mathrm{D}z \, \tanh^2\bigl( z \sqrt{\tilde{q}} \bigr)
+\end{aligned}
+\end{equation}
+これらの方程式を数値的に解くことで、秩序パラメータ$q$と共役変数$\tilde{q}$が決定される。
+
+\subsection{\texorpdfstring{$q\ll 1$}{q≪1}の場合}
+高温相(\texorpdfstring{$\beta J \ll 1$}{βJ≪1})では秩序パラメータ$q$は小さいため、摂動展開が可能である。
+$\tanh$関数をテイラー展開すると、
+\begin{equation}
+\begin{aligned}
+q 
+&= \int \mathrm{D}z \tanh^2(\beta J\sqrt{q}z) \\
+&\approx \int \mathrm{D}z (\beta J \sqrt{q}z - \frac{1}{3}(\beta J \sqrt{q})^3z^3)^2\\
+&\approx (\beta J)^2\int \mathrm{D}z z^2 -\frac{2}{3}(\beta J)^4q^2\int \mathrm{D}zz^4\\
+&= \frac{(\beta J)^2 -1}{2(\beta J )^4} = \frac{1}{2}\frac{1}{(\beta J)^2}(1 -\frac{1}{(\beta J)^2})
+\end{aligned}
+\end{equation}
+より、相転移点は$\beta J = 1$すなわち$T_c = J$で与えられる。
+
+\subsection{低温度での挙動}
+低温極限$\beta \to \infty$では、$\tanh$関数は階段関数に近づく。
+この極限で積分を評価すると、
+\begin{equation}
+\begin{aligned}
+q 
+&= \int \mathrm{D}z \tanh^2(\beta J\sqrt{q}z) \\
+&= 1 - \int \mathrm{D}z (\frac{1}{\cosh^2(\beta J \sqrt{q}z)})\\
+&\approx 1 - \frac{1}{\beta J \sqrt{q}}\int \mathrm{D}z \frac{d}{dz}(2\Theta(z)-1) \quad (\beta \to \infty) \\
+&= 1 - \frac{1}{\beta J}\int \frac{dz}{\sqrt{2\pi}}2\delta(z)e^{-\frac{z^2}{2}}\\
+&= 1 - \frac{T}{J}\sqrt{\frac{2}{\pi}}
+\end{aligned}
+\end{equation}
+となり、$q$は1に近づく。
+
+しかし、この解には問題がある。エントロピーを計算すると、
+\begin{equation}
+\begin{aligned}
+S 
+&= \frac{\partial f}{\partial T} = \beta^2\frac{\partial}{\partial \beta}[-\frac{1}{\beta} \, \log Z] \\
+&= - \frac{\beta J^2}{4}(1-q^2)+ \frac{\beta J^2}{2}(1-q)q - \frac{1}{\beta}\int \mathrm{D}z(2\cosh \beta J \sqrt{q}z) \\
+&= -\frac{\beta J^2}{4}(1-q)(1+3q) \quad (\beta \to \infty) \\
+S 
+&= - \beta J^2 \sqrt{\frac{2}{\pi} } \frac{1}{\beta J} \\
+&= -J \sqrt{\frac{2}{\pi}}
+\end{aligned}
+\end{equation}
+となり、エントロピーが負になる。これはレプリカ対称性の仮定が低温で破綻していることを示している。
+
+\subsection{1-step RSB}
+このレポートの流れからは必要のない箇所であるが、レプリカ対称性の破れを記述するため、階層的な構造を導入する。
+1-step RSBでは、$n$個のレプリカをブロック長$m$のグループに分割し、
+ブロック内とブロック間で異なる重なりを許す：
+\begin{equation}
+  q_{ab}^{\mathrm{(1RSB)}}
+  =
+  \begin{cases}
+    1,   & a=b,\\[1ex]
+    q_1, & a\neq b\ \text{かつ}\ a,b\in I_{\mu},\\[1ex]
+    q_0, & a\in I_\mu,\ b\in I_\nu,\ \mu\neq \nu,
+    \end{cases}
+\end{equation}
+ここで$I_\mu$は$\mu$番目のブロックに属するレプリカの集合を表す。
+$q_1$はブロック内の重なり、$q_0$はブロック間の重なりである。
+
+この構造を用いて、相互作用項を計算すると、
+\begin{equation}
+\begin{aligned}
+\frac{1}{2} \sum_{a,b} \tilde{q}_{ab} \sum_{i=1}^N \sigma_i^a \sigma_i^b
+&= \frac{1}{2} \tilde{Q} \sum_a \sum_{i=1}^N (\sigma_i^a)^2
+   + \frac{1}{2} \tilde{q}_1 \sum_\mu \sum_{\substack{a,b \in I_\mu \\ a \neq b}} \sum_{i=1}^N \sigma_i^a \sigma_i^b \\
+&\quad + \frac{1}{2} \tilde{q}_0 \sum_{\mu \neq \nu} \sum_{a \in I_\mu} \sum_{b \in I_\nu} \sum_{i=1}^N \sigma_i^a \sigma_i^b \\
+&= \frac{N n}{2} \tilde{Q} 
+   + \frac{\tilde{q}_1}{2} \sum_{i=1}^N \sum_\mu 
+     \Biggl[ \Bigl( \sum_{a \in I_\mu} \sigma_i^a \Bigr)^2 
+            - \sum_{a \in I_\mu} (\sigma_i^a)^2 \Biggr] \\
+&\quad + \frac{\tilde{q}_0}{2} \sum_{i=1}^N 
+     \Biggl[ \Bigl( \sum_\mu \sum_{a \in I_\mu} \sigma_i^a \Bigr)^2
+            - \sum_\mu \Bigl( \sum_{a \in I_\mu} \sigma_i^a \Bigr)^2 \Biggr].
+\end{aligned}
+\end{equation}
+が得られる。
+
+同様に、$\sum_{a,b}q_{ab}\tilde{q}_{ab}$を計算すると、
+\begin{equation}
+\begin{aligned}
+\frac{1}{2} \sum_{a,b} \sum_{\mu,\nu} q_{a_\mu b_\nu} \tilde{q}_{a_\mu b_\nu} 
+&= \frac{1}{2} \sum_a \sum_\mu q_{a_\mu a_\mu} \tilde{q}_{a_\mu a_\mu}
+   + \frac{1}{2} \sum_{a \neq b} \sum_\mu q_{a_\mu b_\mu} \tilde{q}_{a_\mu b_\mu}
+   + \frac{1}{2} \sum_{a,b} \sum_{\mu \neq \nu} q_{a_\mu b_\nu} \tilde{q}_{a_\mu b_\nu} \\
+&= \frac{1}{2} \, m \cdot \frac{n}{m} \, \tilde{Q}
+   + \frac{1}{2} \, m (m-1) \cdot \frac{n}{m} \, \tilde{q}_1
+   + \frac{1}{2} \, m^2 \cdot \frac{n}{m} \Bigl( \frac{n}{m} - 1 \Bigr) \tilde{q}_0
+\end{aligned}
+\end{equation}
+となる。
+
+以上をまとめて、1-step RSBのエントロピーは
+\begin{equation}
+\begin{aligned}
+S(Q) 
+&= \frac{1}{N} \log \int d\tilde{Q} \,
+   \exp \Biggl[
+       - \frac{N}{2} \Bigl( n \tilde{Q} 
+       + n (m-1) q_1 \tilde{q}_1 
+       + n (n-m) q_0 \tilde{q}_0 \Bigr)
+       + \frac{1}{2} n N \tilde{Q} 
+       - \frac{1}{2} n N \tilde{q}_1
+   \Biggr] \\
+&\quad \times \prod_{i=1}^N \Biggl(
+       \int \mathrm{D}z_i \prod_\mu 
+       \Biggl(
+           \int \mathrm{D}y_{\mu i} \prod_{a \in I_\mu} 
+           \sum_{\sigma_i^{a_\mu} = \pm 1} 
+           \exp \Bigl[ 
+               \sqrt{\tilde{q}_1 - \tilde{q}_0} \, y_{\mu i} \, \sigma_i^{a_\mu} 
+               + \sqrt{\tilde{q}_0} \, z_i \, \sigma_i^{a_\mu} 
+           \Bigr]
+       \Biggr)
+   \Biggr)
+\end{aligned}
+\end{equation}
+
+\begin{equation}
+\begin{aligned}
+\prod_{i=1}^N & \Biggl(
+    \int \mathrm{D}z_i \prod_\mu 
+    \Biggl(
+        \int \mathrm{D}y_{\mu i} \prod_{a \in I_\mu} 
+        \sum_{\sigma_i^{a_\mu} = \pm 1} 
+        \exp \Bigl[
+            \sqrt{\tilde{q}_1 - \tilde{q}_0} \, y_{\mu i} \, \sigma_i^{a_\mu} 
+            + \sqrt{\tilde{q}_0} \, z_i \, \sigma_i^{a_\mu} 
+        \Bigr]
+    \Biggr)
+\Biggr) \\
+&= \prod_{i=1}^N \Biggl(
+       \int \mathrm{D}z_i \prod_\mu 
+       \Bigl( 2 \cosh (\sqrt{\tilde{q}_1 - \tilde{q}_0} \, y_{\mu i} + \sqrt{\tilde{q}_0} \, z_i) \Bigr)^m
+\Biggr)^{\frac{n}{m}} \\
+&= \Biggl( \int \mathrm{D}z \Bigl( \int \mathrm{D}y \, 2 \cosh(\sqrt{\tilde{q}_1 - \tilde{q}_0} \, y + \sqrt{\tilde{q}_0} \, z)^m \Bigr)^{\frac{n}{m}} \Biggr)^N \\
+&= \exp \Biggl[ N \log \int \mathrm{D}z \Bigl( \int \mathrm{D}y \, 2 \cosh(\sqrt{\tilde{q}_1 - \tilde{q}_0} \, y + \sqrt{\tilde{q}_0} \, z)^m \Bigr)^{\frac{n}{m}} \Biggr] \\
+&= \exp \Biggl[ N \log \int \mathrm{D}z \, \exp \Bigl( \frac{n}{m} \log \int \mathrm{D}y \, (2 \cosh(\sqrt{\tilde{q}_1 - \tilde{q}_0} \, y + \sqrt{\tilde{q}_0} \, z))^m \Bigr) \Biggr] \\
+&\approx \exp \Biggl[ N \log \int \mathrm{D}z \, \Bigl( 1 + \frac{n}{m} \log \int \mathrm{D}y \, (2 \cosh(\sqrt{\tilde{q}_1 - \tilde{q}_0} \, y + \sqrt{\tilde{q}_0} \, z))^m \Bigr) \Biggr] \\
+&\approx \exp \Biggl[ N \frac{n}{m} \int \mathrm{D}z \, \log \int \mathrm{D}y \, (2 \cosh(\sqrt{\tilde{q}_1 - \tilde{q}_0} \, y + \sqrt{\tilde{q}_0} \, z))^m \Biggr].
+\end{aligned}
+\end{equation}
+
+以上をまとめると、$n$個のレプリカの分配関数の配位平均は
+\begin{equation}
+\begin{aligned}
+\mathbb{E}_J[Z_J^n] 
+&= \int dq_0 \, dq_1 \, d\tilde{q}_0 \, d\tilde{q}_1 \, 
+   \exp\Bigl( N \Phi_n(q_0, q_1, \tilde{q}_0, \tilde{q}_1, m) \Bigr)
+\end{aligned}
+\end{equation}
+と書ける。ここで、レプリカ自由エネルギー密度$\Phi_n$は
+\begin{equation}
+\begin{aligned}
+\Phi_n(q_0, q_1, \tilde{q}_0, \tilde{q}_1, m)
+&= -\frac{n}{2}(q_1 \tilde{q}_1 + (n-m)(q_0 - q_1)\tilde{q}_0) \\
+&\quad + \frac{n\beta^2 J^2}{4}\Bigl[n - (n-m)q_1^2 - m q_0^2\Bigr] \\
+&\quad + \frac{n}{m} \int \mathrm{D}z \, \log \int \mathrm{D}y \, 
+   \Bigl[2 \cosh\bigl(\beta(\sqrt{\tilde{q}_1 - \tilde{q}_0}\,y + \sqrt{\tilde{q}_0}\,z)\bigr)\Bigr]^m
+\end{aligned}
+\end{equation}
+で与えられる。
+
+熱力学的極限$N\to\infty$では鞍点法により、積分は鞍点での値で近似される：
+\begin{equation}
+\mathbb{E}_J[Z_J^n] \approx \exp\Bigl( N \Phi_n(q_0^*, q_1^*, \tilde{q}_0^*, \tilde{q}_1^*, m) \Bigr)
+\end{equation}
+鞍点は、$\Phi_n$を各パラメータで偏微分してゼロとおく条件から決定される：
+\begin{equation}
+\frac{\partial \Phi_n}{\partial q_0} = 0, \quad
+\frac{\partial \Phi_n}{\partial q_1} = 0, \quad
+\frac{\partial \Phi_n}{\partial \tilde{q}_0} = 0, \quad
+\frac{\partial \Phi_n}{\partial \tilde{q}_1} = 0, \quad
+\frac{\partial \Phi_n}{\partial m} = 0
+\end{equation}
+
+レプリカトリック$n\to 0$の極限を取ると、1スピンあたりの自由エネルギー密度は
+\begin{equation}
+-\beta f = \lim_{n\to 0} \frac{\Phi_n}{n}
+\end{equation}
+となる。以下では、この鞍点方程式を$q_1$、$q_0$、$m$についてそれぞれ導出する。
+
+\subsection{\texorpdfstring{$q_1$}{q1}に対する鞍点方程式}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+$q_1$ は「同一の谷内」で測った 2 つの配置の典型的重なりであり，
+谷内部のコヒーレンスや「狭さ」を表す．
+$q_1$ に関する微分を行うため，
+まず記号を導入する：
+\begin{equation}
+\begin{aligned}
+  h(y,z) &:= \sqrt{q_1-q_0}\,y + \sqrt{q_0}\,z,
+  \label{eq:def-h}\\[0.5ex]
+  X(y,z) &:= 2\cosh\bigl(\beta h(y,z)\bigr),
+  \label{eq:def-X}\\[0.5ex]
+  I(z)   &:= \int \mathrm{D}y\,[X(y,z)]^m.
+  \label{eq:def-I}
+\end{aligned}
+\end{equation}
+このとき 1RSB 自由エネルギーは
+\begin{equation}
+ -\beta f_{\mathrm{1RSB}}
+ = \frac{\beta^2}{4}\Bigl[1 - (1-m)q_1^2 - m q_0^2\Bigr]
+   + \frac{1}{m}\int \mathrm{D}z\,\log I(z).
+\end{equation}
+$q_1$ に関して微分すると，
+第 1 項は
+\begin{equation}
+  \frac{\partial}{\partial q_1}
+  \left\{
+    \frac{\beta^2}{4}[1-(1-m)q_1^2-mq_0^2]
+  \right\}
+  = -\frac{\beta^2}{2}(1-m)q_1,
+\end{equation}
+となる．
+第 2 項については連鎖律を用いて
+\begin{equation}
+  \frac{\partial}{\partial q_1}
+  \left(
+    \frac{1}{m}\int \mathrm{D}z\,\log I(z)
+  \right)
+  =
+  \frac{1}{m} \int \mathrm{D}z\,
+  \frac{1}{I(z)}\frac{\partial I(z)}{\partial q_1}.
+\end{equation}
+さらに
+\begin{equation}
+  \frac{\partial I(z)}{\partial q_1}
+  = \int \mathrm{D}y\;
+    m [X(y,z)]^{m-1}
+    \frac{\partial X(y,z)}{\partial q_1},
+\end{equation}
+となる．
+$X=2\cosh(\beta h)$，$h=h(y,z)$ の連鎖律から
+\begin{equation}
+  \frac{\partial X}{\partial h}
+  = 2\beta\sinh(\beta h),
+\end{equation}
+\begin{equation}
+  \frac{\partial h}{\partial q_1}
+  = \frac{y}{2\sqrt{q_1-q_0}},
+\end{equation}
+であるため，
+\begin{equation}
+  \frac{\partial X}{\partial q_1}
+  =
+  \frac{\partial X}{\partial h}
+  \frac{\partial h}{\partial q_1}
+  =
+  \beta\,\frac{y}{\sqrt{q_1-q_0}}\,
+  \sinh(\beta h).
+\end{equation}
+この結果を用いると，
+$I(z)$ の微分は
+\begin{equation}
+  \frac{1}{I(z)}
+  \frac{\partial I(z)}{\partial q_1}
+  =
+  \int \mathrm{D}y\,
+  \frac{[X(y,z)]^m}{I(z)}\,
+  \frac{1}{X(y,z)}
+  \frac{\partial X(y,z)}{\partial q_1}.
+\end{equation}
+ここで
+\begin{equation}
+  \frac{[X(y,z)]^m}{I(z)}
+\end{equation}
+は $y$ に関する正規化された重みとして解釈できる．
+さらに
+\begin{equation}
+  \frac{1}{X}\frac{\partial X}{\partial q_1}
+  = \frac{\partial}{\partial q_1}
+    \log X
+  = \frac{\partial h}{\partial q_1}\,\beta\tanh(\beta h),
+\end{equation}
+であることを用いると，最終的に $q_1$ に関するサドル点方程式は
+\begin{equation}
+  q_1
+  = \int \mathrm{D}z\,
+    \frac{
+      \displaystyle
+      \int \mathrm{D}y\,[X(y,z)]^m
+                \tanh^2\!\bigl(\beta h(y,z)\bigr)
+    }{
+      \displaystyle
+      \int \mathrm{D}y\,[X(y,z)]^m
+    }.
+  \label{eq:SK-1RSB-q1}
+\end{equation}
+となる．
+
+これは次のように解釈できる：
+固定された $z$ に対して
+\begin{equation}
+  \langle \sigma\rangle_{y|z}
+  =
+  \frac{
+    \int \mathrm{D}y\,[X(y,z)]^m \tanh\bigl(\beta h(y,z)\bigr)
+  }{
+    \int \mathrm{D}y\,[X(y,z)]^m
+  }
+\end{equation}
+を、その $z$ に対応する谷の中での局所磁化と解釈すると，
+$q_1$ はこの局所磁化の二乗を $y,z$ の分布にわたって平均した量になっている．
+すなわち，$q_1$ は同じ谷からサンプルされた 2 つの配置の典型的重なりであり，
+  pure state の内部のコヒーレンス（狭さ）を測っている
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{\texorpdfstring{$q_0$}{q0}に対する鞍点方程式}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+$q_0$ は「異なる谷」に属する 2 つの配置の典型的重なりを表す．
+$q_0$ に関する微分の構造は $q_1$ の場合と類似するが，
+$h(y,z)$ において $q_0$ は両方の項に現れる点が異なる：
+\begin{equation}
+  h(y,z)
+  = \sqrt{q_1-q_0}\,y + \sqrt{q_0}\,z.
+\end{equation}
+$q_0$ に関する微分をとると
+\begin{equation}
+  \frac{\partial h}{\partial q_0}
+  = -\frac{y}{2\sqrt{q_1-q_0}}
+    + \frac{z}{2\sqrt{q_0}},
+  \label{eq:dh-dq0}
+\end{equation}
+となる．
+
+同様にして $X=2\cosh(\beta h)$ を用いると
+\begin{equation}
+  \frac{\partial X}{\partial q_0}
+  =
+  \frac{\partial X}{\partial h}
+  \frac{\partial h}{\partial q_0}
+  =
+  2\beta\sinh(\beta h)
+  \left(
+    -\frac{y}{2\sqrt{q_1-q_0}}
+    + \frac{z}{2\sqrt{q_0}}
+  \right).
+\end{equation}
+$I(z)$ の微分および $B=(1/m)\int \mathrm{D}z\log I(z)$ の微分は
+$q_1$ の場合と同じ構造を持ち，最終的に
+$q_0$ に対するサドル点方程式は
+\begin{equation}
+  q_0
+  = \int \mathrm{D}z\,
+    \left[
+      \frac{
+        \displaystyle
+        \int \mathrm{D}y\, [X(y,z)]^m
+                  \tanh\bigl(\beta h(y,z)\bigr)
+      }{
+        \displaystyle
+        \int \mathrm{D}y\, [X(y,z)]^m
+      }
+    \right]^2.
+  \label{eq:SK-1RSB-q0}
+\end{equation}
+ここで
+\begin{equation}
+  m(z)
+  :=
+  \frac{
+    \displaystyle
+    \int \mathrm{D}y\, [X(y,z)]^m
+              \tanh\bigl(\beta h(y,z)\bigr)
+  }{
+    \displaystyle
+    \int \mathrm{D}y\, [X(y,z)]^m
+  }
+\end{equation}
+を「$z$ に対応する谷の中での局所磁化」と解釈すると，
+\eqref{eq:SK-1RSB-q0} は
+\begin{equation}
+  q_0 = \int \mathrm{D}z\, m(z)^2
+\end{equation}
+と書ける．
+したがって $q_0$ は異なる谷からサンプルされた 2 つの配置の典型的重なりであり，
+  配置空間における谷どうしの典型的距離を反映する．
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{\texorpdfstring{$m$}{m}に対する鞍点方程式と物理的意味}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Parisi パラメータ $m$ は，
+pure state の Boltzmann 重み分布 $\{w_\alpha\}$ に対する
+R\'enyi 型の重み付け指数として機能し，
+深い谷と浅い谷の寄与のバランスを制御する．
+$q_0,q_1$ を固定して $m$ で微分すると，
+\begin{equation}
+  A(q_0,q_1,m)
+  = \frac{\beta^2}{4}\bigl[1-(1-m)q_1^2-m q_0^2\bigr]
+\end{equation}
+については
+\begin{equation}
+  \frac{\partial A}{\partial m}
+  = \frac{\beta^2}{4}(q_1^2 - q_0^2).
+\end{equation}
+$B(q_0,q_1,m)=(1/m)\int \mathrm{D}z\,\log I(z)$ については
+\begin{equation}
+  \frac{\partial B}{\partial m}
+  =
+  -\frac{1}{m^2}\int \mathrm{D}z\,\log I(z)
+  + \frac{1}{m}\int \mathrm{D}z\;
+    \frac{1}{I(z)}\frac{\partial I(z)}{\partial m}.
+\end{equation}
+$I(z)=\int \mathrm{D}y\,[X(y,z)]^m$ より，
+\begin{equation}
+  \frac{\partial I(z)}{\partial m}
+  = \int \mathrm{D}y\,[X(y,z)]^m \log X(y,z).
+\end{equation}
+したがって
+\begin{equation}
+  \frac{1}{I(z)}\frac{\partial I(z)}{\partial m}
+  =
+  \int \mathrm{D}y\,
+  \frac{[X(y,z)]^m}{I(z)}\,
+  \log X(y,z)
+  =: \bigl\langle \log X(y,z)\bigr\rangle_{m,z},
+\end{equation}
+と書ける．ここで
+\begin{equation}
+  \bigl\langle F(y,z)\bigr\rangle_{m,z}
+  :=
+  \frac{
+    \displaystyle
+    \int \mathrm{D}y\,[X(y,z)]^m F(y,z)
+  }{
+    \displaystyle
+    \int \mathrm{D}y\,[X(y,z)]^m
+  }
+\end{equation}
+は，固定された $z$ に対して $[X(y,z)]^m$ を重みとした
+$y$ に関する期待値を表す．
+
+以上より
+\begin{equation}
+  \frac{\partial B}{\partial m}
+  =
+  -\frac{1}{m^2}\int \mathrm{D}z\,\log I(z)
+  + \frac{1}{m}\int \mathrm{D}z\,
+    \bigl\langle \log X(y,z)\bigr\rangle_{m,z}.
+\end{equation}
+したがってサドル点条件 $\partial f_{\mathrm{1RSB}}/\partial m=0$ は
+\begin{equation}
+  \frac{\beta^2}{4}(q_1^2 - q_0^2)
+  -\frac{1}{m^2}\int \mathrm{D}z\,\log I(z)
+  + \frac{1}{m}\int \mathrm{D}z\,
+    \bigl\langle \log X(y,z)\bigr\rangle_{m,z}
+  = 0.
+  \label{eq:SK-1RSB-m}
+\end{equation}
+
+この条件は，直観的には，
+「谷の内部構造（$q_1,q_0$）と，
+谷の数や重み分布（$m$）とのバランス」を決めるものである．
+より高度な言い方をすると，
+pure state の自由エネルギー分布に対する
+複雑さ（complexity） $\Sigma(f)$ を導入したとき，
+$\partial f/\partial m=0$ は
+\begin{equation}
+  \Sigma(f) = 0
+\end{equation}
+という条件と等価であり，実際に物理的に実現される自由エネルギー密度では，
+pure state の数のスケーリングがちょうど打ち消されるという意味を持つ．
+
+\section{メッセージ伝播法と動的手法}
+
+本節では、グラフ上のスピン系を解析する様々な手法の関係性を明らかにする。
+Bethe近似に基づくBelief Propagation、TAP方程式、Approximate Message Passing (AMP)、および状態発展法の理論的枠組みを統一的に扱い、これらがレプリカ法とどのように対応するかを示す。
+
+平均場近似では、全てのスピンの相互作用を平均場として近似するが、グラフ構造を持つ系では、この近似は必ずしも良くない。
+Bethe近似は、局所的な相関を考慮した改良版であり、特に木構造のグラフでは厳密解を与える。
+ループを持つグラフに対しても、Belief Propagation (BP)アルゴリズムとして実装でき、多くの場合に良い近似を与える。
+以下では、まずBPの一般的な定式化を行い、次に具体的な模型への適用を通じて、TAP方程式やAMPとの関係を明らかにする。
+
+\subsection{Belief Propagation}一般のグラフ構造を持つ確率分布は、因子の積として表現できる：
+\begin{equation}
+\begin{aligned}
+P(\boldsymbol{\sigma}) 
+&= \frac{1}{Z}\exp(\sum_{k \neq l}J_{kl}\sigma_k\sigma_l + \sum_k h_k\sigma_k)\\
+&= \frac{1}{Z}\exp(\sum_\mu J_\mu\prod _{l \in \partial_\mu}\sigma_l + \sum_k h_k \sigma_k)\\
+&= \frac{1}{Z}\prod_\mu P_\mu(\boldsymbol{\sigma}_{\partial_\mu}) \prod_k P_k(\sigma_k)
+\end{aligned}
+\end{equation}
+第一の形は通常のスピン系、第二の形は因子グラフ表現である。
+
+Belief Propagationでは、ノードと因子の間でメッセージを交換する：
+\begin{equation}
+\begin{aligned}
+m_{\mu \to k}(\sigma_k) 
+&\propto \sum_{\sigma_{ \partial \mu \neq k}}P_\mu(\boldsymbol{\sigma}_{\partial_\mu}) \prod_{l \in \partial \mu \setminus \{k\}} m_{l \to \mu}(\sigma_l)\\
+m_{k \to \mu}(\sigma_k) 
+&= P_k(\sigma_k)\prod_{\nu \in \partial k \neq \mu} m_{\nu \to k}(\sigma_k)
+\end{aligned}
+\end{equation}
+と定義される。
+
+Isingモデルの場合、因子は
+\begin{equation}
+\begin{aligned}
+P_\mu(\boldsymbol{\sigma}_{\partial \mu}) &\propto \exp(J_\mu \prod_{l \in \partial \mu}\sigma_l)\\
+P_k(\sigma_k) &\propto \exp(h_k \sigma_k)
+\end{aligned}
+\end{equation}
+で与えられる。したがって、メッセージ更新式は
+\begin{equation}
+\begin{aligned}
+m_{\mu \to k}(\sigma_k) \propto \sum_{x_{\partial \mu \setminus k}}\exp (J_\mu \prod_{l \in \partial \mu})m_{l \to \mu}(\sigma_l)\\
+m_{k\to\mu}(\sigma_k) \propto \exp(h_k \sigma_k)\prod_{\nu \in \partial k \neq \mu }m_{\nu \to k}(\sigma_k)
+\end{aligned}
+\end{equation}
+となる。ここで、メッセージを実効場でパラメータ化し、
+\begin{equation}
+\begin{aligned}
+m_{k \to \mu} \propto \exp (\tilde{h}_{k \to \mu}\sigma_k )
+\end{aligned}
+\end{equation}
+とおく。恒等式
+\begin{equation}
+\begin{aligned}
+f(X ) &= \frac{e^{aX}}{2 \cosh a}\\
+e^{ax} &= \cosh a + x \sinh a \quad( x= \pm1)\\
+&= \cosh a(1 + x\tanh a)
+\end{aligned}
+\end{equation}
+を用いると、
+\begin{equation}
+\begin{aligned}
+m_{\mu \to k} (\sigma_k) 
+&\propto \sum_{x_{\partial \mu \setminus k}}(\cosh J_\mu + \prod_{l \in \partial \mu }{\sigma_l}\sinh J_\mu)\prod_{l \in \partial \mu  \neq k}m_{l \to \mu}(\sigma_l)\\
+&= \cosh J_\mu (1 + \sigma_k \prod_{l \in \partial \mu \neq k }\sum_{\sigma_l} \sigma_lm_{l \to \mu}(\sigma_l)\tanh J_\mu)\\
+&\propto \exp(\tilde{h}_{l \to k} \sigma_k) \quad \tanh\tilde{h}_{\mu \to k} = \tanh J_\mu \prod_{l \in \partial \mu \setminus \{k\}}\tanh \tilde{h}_{l \to \mu}
+\end{aligned}
+\end{equation}
+一方
+\begin{equation}
+\begin{aligned}
+m_{k \to \mu} (\sigma_k) 
+&\propto \exp(h_k\sigma_k)  \prod_{\nu \in \partial k \neq \mu}(\sigma_k)\\
+&= \exp((h_k + \sum_{\nu \in \partial k \neq \mu}\tilde{h}_{\nu \to k})\sigma_k)
+\end{aligned}
+\end{equation}
+よって
+\begin{equation}
+\begin{aligned}
+\tilde{h}_{k \to \mu} = h_k + \sum_{\nu \in \partial k \neq q}\tilde{h}_{\nu \to k}
+\tanh \tilde{h}_{\mu \to k} = \tanh J_\mu \prod_{l \in \partial \mu \setminus \{k\}}\tanh \tilde{h}_{l \to \mu}
+\end{aligned}
+\end{equation}
+マージナルの計算
+\begin{equation}
+\begin{aligned}
+P(\sigma_k) = \prod_{\mu \in \partial k}m_{\mu \ \to k}(\sigma_k)P_k(\sigma_k)
+\end{aligned}
+\end{equation}
+\begin{equation}
+\begin{aligned}
+P(\sigma_k,\sigma_l) = \prod _{\nu \in \partial k \neq \mu}m_{\nu \to k}(\sigma_k)\prod_{\nu' \in \partial l \neq \mu }m_{\nu' \to l}(\sigma_l)P_\mu(\sigma_k,\sigma_l)    
+\end{aligned}
+\end{equation}
+単一ノードの周辺確率$P(\sigma_k)$は全ての隣接因子からのメッセージの積で、
+二つのノードの同時確率$P(\sigma_k,\sigma_l)$はそれぞれのノードへのメッセージと
+因子$\mu=(kl)$の確率分布の積で表される。
+
+\subsection{伏見テンパリーモデル}
+
+伏見テンパリーモデル（Curie-Weiss模型とも呼ばれる）は、全てのスピン間に等しい強さの相互作用が働く平均場模型である。
+この模型では、各スピンが他の全てのスピンと相互作用するため、密結合グラフ上のスピン系として扱える。
+BPをこの模型に適用することで、平均場近似との関係やOnsager反跳項の役割が明確になる。
+
+エネルギーとボルツマン分布は以下で与えられる：
+\begin{equation}
+\begin{aligned}
+E(\boldsymbol{\sigma})
+&= -\frac{J}{2N}\sum_{i \neq j}\sigma_i \sigma_j - h\sum_{k=1}^N \sigma_k\\
+P(\boldsymbol{\sigma})
+&= \frac{1}{Z}\exp(-\beta E(\boldsymbol{\sigma})) = \frac{1}{Z}\exp(\frac{\beta J}{2N}\sum_{i \neq j}\sigma_i \sigma_j + \beta h\sum_{k=1}^N \sigma_k)\\
+\end{aligned}
+\end{equation}
+ここで、結合定数は$J/N$とスケールされており、エネルギーが示量的になるように規格化されている。
+
+このモデルにBPの更新式を適用すると、
+\begin{equation}
+\begin{aligned}
+\tilde{h}_{k \to \mu} 
+&= \beta h + \sum_{\nu \in \partial k \neq \mu}\tilde{h}_{\nu \to k}\\
+\tilde{h}_{\mu \to k}
+&= \tanh^{-1}(\tanh\frac{\beta J}{N}\prod _{l \in \partial \mu \neq k}\tanh(\tilde{h}_{l\to \mu}))\\
+&\approx \frac{\beta J}{N}\prod_{l \in \partial \mu \setminus \{k\}}\tanh (\tilde{h}_{l\to \mu})
+\end{aligned}
+\end{equation}
+二体相互作用
+\begin{equation}
+\begin{aligned}
+\tilde{h}_{k \to (kl)} 
+&= \beta h + \sum_{l' \in \partial k \neq l }\tilde{h}_{kl' \to k}\\
+&= \beta h + \frac{\beta J }{N} \sum_{l' \in \partial k \neq l }\tanh(\tilde{h}_{l'\to (kl')})
+\end{aligned}
+\end{equation}
+期待値
+\begin{equation}
+\begin{aligned}
+m_k = \tanh(\beta h + \frac{\beta J}{N}\sum_{l \in \partial k}\tanh \tilde{h}_{l \to k})
+\end{aligned}
+\end{equation}
+一方
+\begin{equation}
+\begin{aligned}
+\tanh \tilde{h}_{k \to l} 
+&= \tanh(\beta h + \frac{\beta J}{N}\sum_{l \in \partial k}\tanh \tilde{h}_{l \to k}-\frac{\beta J}{N}\tanh \tilde{h}_{l \to k})\\
+&\approx m_k - \frac{\beta J}{N}\tanh \tilde{h}_{l \to k}(1-m_k^2)\\
+&\approx m_k - \frac{\beta J}{N}(1-m_k^2)m_l
+\end{aligned}
+\end{equation}
+\begin{equation}
+\begin{aligned}
+m_k 
+&= \tanh(\beta h + \frac{\beta J}{N}\sum_{l \in \partial k}(m_l - \frac{\beta J}{N}(1-m_l^2)m_k))\\
+&\approx \tanh(\beta h + \frac{\beta J}{N}\sum_{l \in \partial k}m_l)
+\end{aligned}
+\end{equation}
+ここでOnsager反跳項$\frac{\beta J}{N}(1-m_l^2)m_k$は$O(1/N^2)$のオーダーであり、
+大規模系の極限$N\to\infty$で無視できる。
+したがって、素朴な平均場近似
+\begin{equation}
+m_k = \tanh(\beta h + \beta J \langle m \rangle)
+\end{equation}
+を再現する。ここで$\langle m \rangle = \frac{1}{N}\sum_l m_l$は平均磁化である。
+
+この結果は、完全グラフ（全結合グラフ）上のスピン系では、
+各スピンが受ける実効場が他の全てのスピンの磁化の平均で近似できることを示している。
+
+なお、このBP的アプローチは2000年代初頭にCDMA通信の復号問題に応用され、
+実用的な通信システムの設計に大きく貢献した。
+
+\subsection{ランダム系とTAP方程式}
+
+次に、ランダムな結合強度を持つスピングラス系を考える。
+SK模型のようなランダム結合系では、結合定数のスケーリングが$J/\sqrt{N}$となるため、
+Onsager反跳項が$O(1)$となり、無視できなくなる。
+この項を適切に扱うことで、TAP（Thouless-Anderson-Palmer）方程式が導出される。
+ランダム結合を持つスピングラス系を考える：
+\begin{equation}
+\begin{aligned}
+E(\boldsymbol{\sigma})= -\frac{1}{2}\sum_{i \neq j}J_{ij}\sigma_i\sigma_j - \sum_{k=1}^N h_k \sigma_k \quad J_{ij} \sim \mathcal{N}(0,\frac{J^2}{N})
+\end{aligned}
+\end{equation}
+ここで、結合$J_{ij}$は互いに独立なガウス乱数であり、平均0、分散$J^2/N$の分布に従う。
+この$1/\sqrt{N}$のスケーリングにより、エネルギーが$O(N)$となり示量性を保つ。
+
+重要な点は、$J_{ij}$が$O(1/\sqrt{N})$であるため、
+Onsager反跳項が$O(1)$となり無視できなくなることである。
+これは伏見テンパリーモデルの場合（$J/N$スケーリング）と異なる。
+確率分布は
+\begin{equation}
+\begin{aligned}
+P(\boldsymbol{\sigma})= \frac{1}{Z}\exp(–\beta E(\boldsymbol{\sigma}))= \frac{1}{Z}\exp(\frac{\beta J}{2 \sqrt{N}}\sum_{i \neq j}\mathcal{N}_{ij}\sigma_i\sigma_j+ \beta \sum_{k=1}^Nh_k\sigma_k)\quad (\mathcal{N}_{ij}=\mathcal{N}_{ji})\\
+\end{aligned}
+\end{equation}
+\begin{equation}
+\begin{aligned}
+\tilde{h}_{k\to\mu} 
+&= h_k + \sum_{\nu \in \partial k \neq \mu}\tilde{h}_{\nu \to k}\\
+\tilde{h}_{\mu\to k}
+&=\tanh^{-1}(\tanh(\frac{\beta J}{\sqrt{N}}\mathcal{N}_{ij})\prod_{l \in \partial \mu \setminus \{k\}}\tanh \tilde{h}_{l\to \mu})\\
+&\approx \frac{\beta J}{\sqrt{N}}\mathcal{N}_{ij}\prod_{l \in \partial \mu \setminus \{k\}}\tanh \tilde{h}_{l \to \mu}
+\end{aligned}
+\end{equation}
+２体相互作用
+\begin{equation}
+\begin{aligned}
+\tilde{h}_{k \to (kl)} 
+&= \beta h_k + \sum_{l' \in \partial k \neq l} \tilde{h}_{kl' \to k}\\
+&= \beta h_k + \frac{\beta J}{\sqrt{N}}\sum_{l' \in \partial k \neq l}\mathcal{N}_{kl'}\tanh\tilde{h}_{l' \to (kl')}
+\end{aligned}
+\end{equation}
+\begin{equation}
+\begin{aligned}
+m_k = \tanh (\beta h_k + \frac{\beta J}{\sqrt{N}}\sum_{l \in \partial k}\mathcal{N}_{kl}\tanh \tilde{h}_{l \to k})
+\end{aligned}
+\end{equation}
+一方
+\begin{equation}
+\begin{aligned}
+\tanh \tilde{h}_{k \to l} 
+&= \tanh (\beta h_k + \frac{\beta J}{\sqrt{N}}\sum_{l' \in \partial k}\mathcal{N}_{kl'}\tanh \tilde{h}_{l' \to k}- \frac{\beta J}{\sqrt{N}}\mathcal{N}_{kl}\tanh \tilde{h}_{l \to k})\\
+&= m_k - \frac{\beta J}{\sqrt{N}}\mathcal{N}_{kl}\tanh \tilde{h}_{l' \to k}(1-m_k^2)\\
+&\approx m_k - \frac{\beta J}{\sqrt{N}}\mathcal{N}_{kl}m_l(1-m_k^2)
+\end{aligned}
+\end{equation}
+を得る。
+
+これより、TAP方程式が導出される：
+\begin{equation}
+\begin{aligned}
+m_k = \tanh (\beta h_k + \frac{\beta J}{\sqrt{N}}\sum_{l \in \partial k}\mathcal{N}_{kl}m_l- \frac{(\beta J)^2}{N}\sum_{l \in \partial k}\mathcal{N}^2_{kl}m_l(1-m_l^2))
+\end{aligned}
+\end{equation}
+この式はTAP（Thouless-Anderson-Palmer）方程式と呼ばれる。
+第一項$\beta h_k$は外場、第二項は他のスピンからの平均場、
+第三項がOnsager反跳項である。
+
+反跳項の物理的意味は、スピン$k$がスピン$l$に与えた影響が、
+再びスピン$k$に戻ってくる効果を補正することである。
+この項を無視すると、自己相関が過大評価され、
+解が不安定になったり、自由エネルギーの計算が不正確になったりする。
+
+TAP方程式は動力学的な解釈も可能である。
+反復法で解く場合、左辺を$t+1$時刻、右辺第二項を$t$時刻、
+反跳項を$t-1$時刻の情報と解釈すると、
+慣性項を含む運動方程式のような構造になっている。
+
+\subsection{Approximate Message Passing (AMP)}
+
+Approximate Message Passing (AMP)は、圧縮センシングや信号処理の分野で発展した手法であり、
+BPとTAP方程式を統一的に扱う枠組みを提供する。
+AMPの特徴は、線形観測モデルに対して効率的な推論アルゴリズムを与え、
+かつその性能を状態発展法（State Evolution）により正確に解析できる点にある。
+まず、線形観測モデルをAMPで扱う。
+\begin{equation}
+\begin{aligned}
+\boldsymbol{y} = A\boldsymbol{x} + \boldsymbol{n}
+\end{aligned}
+\end{equation}
+ここで、$\boldsymbol{x} \in \mathbb{R}^N$は未知の信号ベクトル、
+$A \in \mathbb{R}^{M \times N}$は既知の観測行列（多くの場合ランダム行列）、
+$\boldsymbol{n} \in \mathbb{R}^M$はガウスノイズである。
+目的は、観測$\boldsymbol{y}$と行列$A$から元の信号$\boldsymbol{x}$を推定することである。
+
+圧縮センシングでは$M \ll N$（測定数が変数の数より少ない）の場合を扱い、
+信号$\boldsymbol{x}$にスパース性などの事前情報を課すことで推定を可能にする。
+最尤推定では、観測$\boldsymbol{y}$が与えられたときの尤度関数
+\begin{equation}
+\begin{aligned}
+P(\boldsymbol{y|x}) = P(\boldsymbol{n}) &
+= \frac{1}{\sqrt{2\pi\sigma^2}}\exp(-\frac{1}{2\sigma^2}\boldsymbol{n^Tn}) \\
+&=\frac{1}{\sqrt{2\pi\sigma^2}}\exp(-\frac{1}{2\sigma^2}\|\boldsymbol{y}- A\boldsymbol{x}\|_2^2)
+\end{aligned}
+\end{equation}
+を最大化する$\boldsymbol{x}$を求める。
+これは二乗誤差最小化問題
+\begin{equation}
+\hat{\boldsymbol{x}} = \arg\min_{\boldsymbol{x}} \|\boldsymbol{y}- A\boldsymbol{x}\|_2^2
+\end{equation}
+に相当する。
+
+一方、ベイズ推定では、信号$\boldsymbol{x}$の事前分布$P(\boldsymbol{x})$を考慮して、事後分布
+\begin{equation}
+\begin{aligned}
+P(\boldsymbol{y}|\boldsymbol{x}) = \frac{P(\boldsymbol{x},\boldsymbol{y})}{P(\boldsymbol{\boldsymbol{x}})}
+\end{aligned}
+\end{equation}
+\begin{equation}
+\begin{aligned}
+P(\boldsymbol{x}|\boldsymbol{y}) 
+&= \frac{P(\boldsymbol{x},\boldsymbol{y})}{P(\boldsymbol{y})}\\
+&= \frac{P(\boldsymbol{y}|\boldsymbol{x})P(\boldsymbol{x})}
+         {\sum_{\boldsymbol{x}}P(\boldsymbol{y}|\boldsymbol{x})P(\boldsymbol{x})}
+\end{aligned}
+\end{equation}
+から最大事後確率推定（MAP推定）を行う。
+事前分布に正則化項を課すことで、Ridge回帰やLASSO回帰などの様々な推定手法が得られる。
+
+AMPは、このようなベイズ推定問題を効率的に解くアルゴリズムである。
+より一般的には、以下の最適化問題を考える：
+\begin{equation}
+\begin{aligned}
+\min_{\boldsymbol{x}}\sum_\mu f_\mu(\boldsymbol{a}_\mu^T \boldsymbol{x})+\sum_{k=1}^N\phi_k(x_k)
+\end{aligned}
+\end{equation}
+ここで、$f_\mu(\cdot)$は観測に関する損失関数、$\phi_k(\cdot)$は正則化項を表す。
+$\boldsymbol{a}_\mu$は観測行列$A$の$\mu$行目のベクトルである。
+以下では、$A$の各成分がi.i.d.ガウス分布$\mathcal{N}(0,1/N)$に従うランダム行列の場合を扱う。
+
+この最適化問題に対してBPを適用する。
+対応する確率モデルは
+\begin{equation}
+\begin{aligned}
+P(\boldsymbol{x|\boldsymbol{y}})
+&\propto \prod_\mu \underbrace{\exp(-\beta f_\mu(\boldsymbol{a}_\mu^T \boldsymbol{x}))}_{P_\mu(\boldsymbol{x})}\prod_k \underbrace{\exp(-\beta \phi_k(x_k))}_{P_k(x_k)}\\
+M_{\mu \to k}(x_k) 
+&\propto \sum_{\boldsymbol{x}\neq x_k} P_\mu(\boldsymbol{x})\prod_{l \in  \partial \mu \neq k} M_{l \to \mu }(x_l)\\
+M_{k \to \mu}(x_k)&\propto P_k(x_k)\prod_{\nu \in \partial k \neq \mu}
+M_{\nu \to k}(x_k)\end{aligned}
+\end{equation}
+で与えられる。ここで$M_{\mu \to k}(x_k)$は因子$\mu$からノード$k$へのメッセージ、
+$M_{k \to \mu}(x_k)$はノード$k$から因子$\mu$へのメッセージである。
+
+AMPの導出では、メッセージの平均と分散を用いて近似を行う。
+各メッセージ$M_{l \to \mu}(x_l)$に対して、
+\begin{equation}
+\begin{aligned}
+m_{l \to \mu} &= \sum_{x_l}x_l M_{l \to \mu}(x_l), \quad \text{（期待値）}\\
+V_{l \to \mu} &= \sum_{x_l}x_l^2 M_{l \to \mu}(x_l) \quad \text{（二次モーメント）}
+\end{aligned}
+\end{equation}
+と定義する。
+
+次に、キャビティ効果を導入する。因子$\mu$に関する有効場$u_\mu=\boldsymbol{a}_\mu\cdot\boldsymbol{x}$を考え、
+デルタ関数を用いて因子を書き直す：
+\begin{equation}
+\begin{aligned}
+f_\mu (\boldsymbol{a}_\mu\cdot\boldsymbol{x}) = \int du_\mu f_\mu(u_\mu)\delta(u_\mu -\boldsymbol{a}_\mu^T \boldsymbol{x})\\
+\delta(u_\mu - \boldsymbol{a}_\mu^T \boldsymbol{x})= \int d\tilde{u}_\mu \exp(i \tilde{u}_\mu(u_\mu - \boldsymbol{a}_\mu^T\cdot \boldsymbol{x}))
+\end{aligned}
+\end{equation}
+より、
+\begin{equation}
+\begin{aligned}
+\delta(u_\mu - \boldsymbol{a}_\mu^T\boldsymbol{x}) 
+&= \int d\tilde{u}_\mu \exp(i\tilde{u}_\mu u_\mu)\exp(-i\tilde{u}_\mu a_{\mu k}x_k)
+\prod_{l \in \partial \mu \setminus \{k\}}\underbrace{\sum_{x_l}(1-i\tilde{u_\mu}a_{\mu l}x_l -\frac{1}{2}\tilde{u}_\mu^2a_{\mu l}^2x_l^2)M_{l \to \mu}(x_l)}_{\approx \exp(-i\tilde{u}_\mu a_{\mu l}m_{l \to \mu}-\frac{\tilde{u}_\mu^2}{2}a_{\mu l}^2(V_{l \to \mu }-m_{l \to \mu}^2))}\\
+=& \int d \tilde{u}_\mu\exp(-\frac{1}{2}\underbrace{\sum_{l \in \partial \mu \neq k}a_{\mu l}^2(V_{l \to m}-m_{l \to m}^2)}_{V_{\mu/\beta}}\tilde{u_\mu}^2 + i\tilde{u}_\mu(u_\mu - \sum_{l \in \partial \mu \neq k}a_{\mu l}m_{l \to \mu}-a_{\mu k}x_k))\\
+&= \exp(-\frac{\beta}{2V_\mu}(u_\mu-\sum_l a_{\mu l} m_{l \to \mu} - a_{\mu k}(x_k - m_{k\to \mu})^2))\\
+a_\mu &= \sum_l a_{\mu l}m_{l \to \mu}\\
+V_\mu &= \beta \sum_l a_{\mu l}^2(V_{l\to \mu}-m_{l \to \mu}^2)
+\end{aligned}
+\end{equation}
+\begin{equation}
+\begin{aligned}
+M_{\mu \to k}(x_k) 
+&\propto \int du_\mu \exp(\beta f_\mu(u_\mu)) \exp\left(-\frac{\beta}{2V_\mu}(u_\mu-a_\mu-a_{\mu k}(x_k-m_{k \to \mu}))^2\right) \\
+& \approx \quad \left(1+ a_{\mu k}(x_k-m_{k \to \mu})\underbrace{\int du_\mu \exp(-\beta f_\mu(u_\mu))\exp\left(-\frac{\beta}{2V_\mu}(u_\mu-a_\mu)^2\right)\left(\frac{\beta}{V_\mu}(u_\mu-a_\mu)\right)}_{\beta C_\mu^{(1)}}\right)
+\\&\quad+\frac{1}{2}a_{\mu k}^2(x_k - m_{k\to \mu})^2\underbrace{\int du_\mu \exp(-\beta f_\mu(u_\mu))\exp\left(-\frac{\beta}{2V_\mu}(u_\mu-a_\mu)^2\right)\left(-\frac{\beta }{V_\mu}+\frac{\beta^2}{V_\mu^2}(u_\mu-a_\mu)^2\right)}_{\beta C_\mu^{(2)}+\beta^2(C_\mu^{(1)})^2}
+\end{aligned}
+\end{equation}
+
+
+\begin{equation}
+\begin{aligned}
+Z_\mu &= \int d u_\mu\exp(-\beta f_\mu(u_\mu))\exp(-\frac{\beta}{V_\mu}+\frac{\beta^2}{V_\mu^2}(u_\mu-a_\mu)^2)\\
+C_\mu^{(1)} &= <\frac{1}{V_\mu}(u_\mu-a_\mu)>_u = \frac{\partial}{\partial a_\mu}(\frac{1}{\beta}\log Z_\mu)\\
+C_\mu^{(2)} &=<-\frac{1}{V_\mu}+\frac{\beta}{V_\mu^2}(u_\mu - a_\mu)^2>_u - \beta(C_\mu^{(1)})^2 = \frac{\partial^2}{\partial a_\mu^2}(\frac{1}{\beta}\log Z_\mu)\\
+&\approx \exp(\beta a_{\mu k}(x_k-m_{k\to \mu}C_\mu^{(1)}+\frac{1}{2}\beta a_{\mu k}^2(x_k-m_{k\to \mu})^2C_\mu^{(2)}))
+\end{aligned}
+\end{equation}
+故に
+\begin{equation}
+\begin{aligned}
+M_{\mu \to k}(x_k) 
+&\propto \exp(\beta a_{\mu \to k}x_k - \frac{1}{2}\beta b_{\mu \to k}x_k^2)\\
+a_{\mu \to k} 
+&= a_{\mu k}C_\mu^{(1)}-a_{\mu k}^2m_{k \to \mu}C_{\mu}^{(2)}\\
+b_{\mu \to k} & =-a_{\mu k}^2C_\mu^{(2)}
+\end{aligned}
+\end{equation}
+よって
+\begin{equation}
+\begin{aligned}
+M_{k\to\mu}(x_k)\propto \exp(\beta \phi_k(x_k)+\beta\sum_{\nu \in \partial \mu \setminus \{k\}}a_{\nu \to k}x_k - \frac{1}{2}\beta \sum_{\nu \in \partial \mu \setminus \{k\}}x_k^2)\\
+P(x_k) \propto \exp(-\beta \phi_k(x_k)+ \beta\underbrace{\sum_\mu a_{\mu \to k}}_{a_k}x_k - \frac{1}{2}\underbrace{\sum_\mu b_{\mu \to k}}_{bk}x_k^2)
+\end{aligned}
+\end{equation}
+ 
+\begin{equation}
+\begin{aligned}
+m_k &= \int dx_k x_k P(x_k)\\
+M_{k \to \mu} 
+&= \frac{\exp()(1-\beta a_{\mu \to k}(x_k))}{\sum_{x_k} \exp()(1-\beta a_{\mu \to k}(x_k))}\\
+&=P(x_k)(1-\beta a_{\mu \to k}x_k)(1-\beta a_{\mu \to k}m_k)^{-1}\\
+m_{k \to \mu}　&= \int dx_k x_k M_{k \to \mu}(x_k)\\
+&\approx \int d x_k P(x_k)(x_k - \beta a_{\mu \to k}x_k^2+\beta a_{\mu \to k}m_kx_k)\\
+&= m_k - \beta a_{\mu \to k}(V_k - m_k^2)
+\end{aligned}
+\end{equation}
+まとめると
+\begin{equation}
+\begin{aligned}
+for \sum_\mu f_\mu(\sum_k a_{\mu k}x_k) + \sum_k \phi_k(x_k))\\
+a_\mu  &=\sum_k a_{\mu k}m_k- \beta \sum a_{\mu k}^2(V_k-m_k^2)C_\mu^{(1)} = \sum_k a_{\mu k}m_k - V_\mu C_\mu^{(1)}\\
+V_\mu &= \beta \sum_k a_{\mu k}^2(V_k-m_k)^2
+\end{aligned}
+\end{equation}
+$C_\mu^{(1)}(a_\mu,V_\mu), C_\mu^{(2)}(a_\mu,V_\mu)$がわかる
+\begin{equation}
+\begin{aligned}
+a_k &= \sum_\mu a_{\mu k} C_\mu^{(1)} - \sum_\mu a_{\mu k}^2C_\mu^{(1)}m_k = \sum_\mu a_{\mu k}C_\mu^{(1)}+ b_km_k\\
+b_k& = -\sum_\mu a_{\mu k}^2C_\mu ^{(1)}
+\end{aligned}
+\end{equation}
+
+$m_k(a_k,b_k),V(a_k,V_k)$がわかる
+平均場近似との関係
+\begin{equation}
+\begin{aligned}
+C_\mu^{(1)}= \frac{\partial}{\partial a_\mu}(\frac{1}{\beta}\log Z_\mu)\quad a_\mu = \sum_k a_{\mu k}m_k-V_\mu C_\mu^{(1)}\\
+Z_\mu(a_\mu,V_\mu) = \int du \exp(-\beta f_\mu(u))\exp(-\frac{\beta}{2V_\mu}(u-a_\mu)^2)
+\end{aligned}
+\end{equation}
+\begin{equation}
+\begin{aligned}
+m_k = \int d x_k x_k P(x_k)\\
+P(x_k) \propto \exp(-\beta \phi_k (x_k)- \frac{1}{2}b_k x_k^2+ a_k x_k)\\
+Z_k(a_,b_k) = \int d x_k\exp(\beta \phi_k(x_k)+a_kx_k -\frac{1}{2}b_kx_k^2)\\
+m_k = \frac{\partial}{\partial a_k}(\frac{1}{\beta}\log Z_k)\quad a_k = \sum_\mu a_{\mu k}C_\mu^{(1)}+b_km_k
+\end{aligned}
+\end{equation}
+以上の導出により、AMPの更新式$m_k^{t+1} = f(m_k^t)$が得られる。
+ここで重要な点は、Onsager反跳項$b_k m_k$が自然に現れることである。
+この項を無視すると素朴な平均場近似（naive MF）になり、収束性が悪化する。
+一方、反跳項を含むAMPは、TAP方程式に対応する高速な反復アルゴリズムを与える。
+
+物理的な解釈として、$a_k$は各ノードが受ける実効場（エネルギー項）に対応し、
+$a_\mu$は観測行列の行$\mu$に対応する共役パラメータ（エントロピー項）に対応する。
+AMPの更新は、これらのパラメータを交互に更新することで、
+自己無撞着な解に収束させる手続きと見なせる。
+
+以下では、Ridge回帰とLASSO回帰という具体的な問題にAMPを適用し、
+その動作を詳しく見ていく。
+
+\subsection{Ridge回帰へのAMPの適用}
+
+Ridge回帰は、L2正則化を用いた線形回帰であり、
+観測行列が悪条件の場合でも安定な推定を可能にする。
+AMPの枠組みでRidge回帰を扱うことで、
+大規模系での推定性能を理論的に解析できる。
+\begin{equation}
+\begin{aligned}
+P_\beta (\boldsymbol{y}|\boldsymbol{x}) 
+&\propto \exp\!\left(-\frac{\beta}{2\sigma^2}\|\boldsymbol{y}-A\boldsymbol{x}\|_2^2\right)\\
+P_\beta (\boldsymbol{x}) 
+&\propto \exp\!\left(-\frac{\beta \lambda}{2}\|\boldsymbol{x}\|_2^2\right)\\
+P_\beta (\boldsymbol{y}|\boldsymbol{x}) 
+&\propto \exp\!\left(
+-\frac{\beta}{2\sigma^2}\|\boldsymbol{y}-A\boldsymbol{x}\|_2^2
+-\frac{\beta \lambda}{2}\|\boldsymbol{x}\|_2^2
+\right)\\
+&\xrightarrow{\beta\to\infty}
+\min_{\boldsymbol{x}}
+\left(
+-\frac{1}{2\sigma^2}\|\boldsymbol{y}-A\boldsymbol{x}\|_2^2
+-\frac{\lambda}{2}\|\boldsymbol{x}\|_2^2
+\right)
+\end{aligned}
+\end{equation}
+\begin{equation}
+\begin{aligned}
+\phi_k(x_k) = \frac{\lambda}{2}x_k^2\\
+f_\mu(u) = \frac{1}{2}(y_\mu-u)^2
+\end{aligned}
+\end{equation}
+$C_\mu^{(1)},C_\mu^{(2)}$の計算
+\begin{equation}
+\begin{aligned}
+Z_\mu = \int du \exp(-\beta f_\mu(u))\exp(-\frac{\beta}{2 V_\mu}(u -a_\mu)^2)
+\end{aligned}
+\end{equation}
+$\beta \to \infty $のもとで鞍点法より、
+\begin{equation}
+\begin{aligned}
+\exp(-\frac{\beta}{2}(y_\mu-u^*)^2-\frac{\beta}{2V_\mu}(u^*-a_\mu)^2)\\
+u^*  : (y_\mu -u)- \frac{1}{V_\mu}(u-a_\mu)=0 \quad u^* =\frac{a_\mu+V_\mu y_\mu}{1+V_\mu}\\
+\frac{1}{\beta}\log Z_\mu = -\frac{(y_\mu -a_\mu)^2}{2(1+V_\mu)} 
+\end{aligned}
+\end{equation}
+\begin{equation}
+\begin{aligned}
+C_\mu^{(1)}=\frac{y_\mu -a_\mu}{1+V_\mu}\\
+C_\mu^{(1)}=-\frac{1}{a+V_\mu}
+\end{aligned}
+\end{equation}
+$m_k,V_k$の計算
+
+
+\begin{equation}
+\begin{aligned}
+Z_k = \int dx_k \exp (-\frac{1}{2}\beta(\lambda+b_k)x_k^2 + \beta a_k x_k)
+= \sqrt{\frac{2 \pi}{\beta(\lambda+b_k)}}\exp(\frac{\beta a_k^2}{2(b_k + \lambda)})\\
+\frac{1}{\beta}Z_k \sim \frac{a_k^2}{2(b_k + \lambda)}\\
+m_k = \frac{\partial}{\partial a_k}(\log Z_k) = \frac{a_k}{b_k+\lambda}\quad \beta(V_k-m_k^2) = \frac{\partial^2}{\partial a_k^2}(\frac{1}{\beta}\log Z_k) = \frac{1}{b_k + \lambda}
+V_k = (\frac{a_k}{b_k+\lambda})^2 + \frac{1}{\beta ( b_k+\lambda)}
+\end{aligned}
+\end{equation}
+レプリカ法において、$(\frac{a_k}{b_k+\lambda})^2$は$q$,$V_k = (\frac{a_k}{b_k+\lambda})^2 + \frac{1}{\beta ( b_k+\lambda)}$は$Q$とパラメタライズされるものと対応する。
+\begin{equation}
+\begin{aligned}
+a_\mu = \sum_k a_{\mu k}\frac{a_k}{b_k + \lambda}- \frac{1}{N}\sum_k\frac{1}{b_k+\lambda}\frac{y_\mu -a_\mu}{a+ V_\mu}\\
+a_k = \sum_\mu a_{\mu k}\frac{y_\mu -a _\mu}{1+V_\mu}+\frac{\alpha}{1+V_\mu}(\frac{a_k}{b_k…\lambda})\quad (\alpha = \frac{M}{N})
+\end{aligned}
+\end{equation}
+\begin{equation}
+\begin{aligned}
+<x_k> = m_k^{t+1} = \frac{a_k}{b_k +\lambda}= \frac{1}{1+\frac{\lambda}{b_k}}(\frac{a_k}{b_k})
+= \frac{1}{a+\frac{\lambda}{\alpha}(1+V)}(\frac{1}{\alpha}\sum_\mu a_{\mu k}(y_\mu - \sum_k a_{\mu k}m_k)+m_k)
+\end{aligned}
+\end{equation}
+\begin{equation}
+\begin{aligned}
+V_\mu = \frac{1}{N}\sum_k\frac{1}{b_k+ \lambda} = \frac{1}{b+\lambda} \quad V=\frac{1}{b+\lambda}=\frac{1+V}{\alpha+\lambda(1+V)}\\
+b_k = \frac{1}{N}\sum_\mu \frac{1}{1+V_\mu}=\frac{\alpha}{1+V}\quad1+V_c = \frac{1}{2\lambda}(-(\alpha - \lambda + 1)+ \sqrt{(a-\lambda+1)^2+4\alpha\lambda})
+\end{aligned}
+\end{equation}
+Ridge回帰では、推定量が線形写像で表されるため、解析が比較的容易である。
+また、レプリカ法で現れる秩序パラメータ$q, Q$との対応も明確である。
+
+\subsection{LASSO回帰へのAMPの適用}
+
+LASSO（Least Absolute Shrinkage and Selection Operator）回帰は、
+L1正則化を用いた線形回帰であり、スパース推定（多くの係数を正確にゼロにする）に有効である。
+Ridge回帰と異なり、非線形な軟判定閾値処理が現れるため、より複雑な挙動を示す。
+
+ベイズ的な定式化では、事前分布にラプラス分布（指数分布の両側版）を仮定する：
+\begin{equation}
+\begin{aligned}
+P_\beta (\boldsymbol{y}|\boldsymbol{x}) 
+&\propto \exp\!\left(-\frac{\beta}{2\sigma^2}\|\boldsymbol{y}-A\boldsymbol{x}\|_2^2\right)\\
+P_\beta (\boldsymbol{x}) 
+&\propto \exp\!\left(-\frac{\beta \lambda}{2}\|\boldsymbol{x}\|_1\right)\\
+P_\beta (\boldsymbol{x}|\boldsymbol{y}) 
+&\propto \exp\!\left(
+-\frac{\beta}{2\sigma^2}\|\boldsymbol{y}-A\boldsymbol{x}\|_2^2
+-\frac{\beta \lambda}{2}\|\boldsymbol{x}\|_1
+\right)\\
+&\xrightarrow{\beta\to\infty}
+\min_{\boldsymbol{x}}
+\left(
+\frac{1}{2\sigma^2}\|\boldsymbol{y}-A\boldsymbol{x}\|_2^2
++\frac{\lambda}{2}\|\boldsymbol{x}\|_1
+\right)
+\end{aligned}
+\end{equation}
+ゼロ温度極限$\beta\to\infty$で、LASSO回帰の最適化問題が得られる。
+
+AMPの枠組みでは、
+\begin{equation}
+\begin{aligned}
+\|\boldsymbol{y}-A\boldsymbol{x}\|_2^2 &= \sum_\mu(y_\mu - \boldsymbol{a}_\mu^T \boldsymbol{x})^2
+\end{aligned}
+\end{equation}
+\begin{equation}
+\phi_x(x_k) = \lambda\|x_k\|_1 \quad f_\mu(u)= \frac{1}{2}(y_\mu-u)^2\\
+\end{equation}
+$m_k,V_k$の計算
+\begin{equation}
+\begin{aligned}
+Z_k = \int dx_k \exp(-\beta \lambda\|x_k\|_1+ \beta a_kx_k -\frac{1}{2}\beta b_kx_k^2)\\
+\frac{1}{\beta} \log Z_k \rightarrow \min_x(\frac{1}{2}b_k(x-\frac{a_k}{b_k}^2+ \lambda\|x_k\|_1))\\
+x_k^* = S_{\frac{\lambda}{b_k}}(\frac{a_k}{b_k})
+\end{aligned}
+\end{equation}
+ここで、最適化問題の解$x_k^*$を求めるために、近接写像（proximal operator）という概念を用いる。
+一般に、関数$f(x)$に対する近接写像は
+\begin{equation}
+\begin{aligned}
+\mathrm{Prox}_f(V) = \arg \min_x\left(\frac{1}{2}(x-V)^2+f(x)\right)
+\end{aligned}
+\end{equation}
+と定義される。これは、点$V$に近いという制約の下で$f(x)$を最小化する問題であり、
+点$V$と関数$f$の最小化のバランスを取った解を与える。
+
+$f(x) = \lambda\|x\|_1$（絶対値関数）の場合、近接写像は軟判定閾値関数（soft-thresholding function）と呼ばれ、
+\begin{equation}
+\begin{aligned}
+S_\lambda(V)
+&=\arg \min_x\left(\frac{1}{2}(x-V)^2+\lambda\|x\|_1\right)\\
+&=\begin{cases}
+    V-\lambda\quad&(V>\lambda)\\
+    0 &(-\lambda\leq V\leq\lambda)\\
+    V+\lambda&(V<-\lambda)
+\end{cases}
+\end{aligned}
+\end{equation}
+で与えられる。この関数の重要な性質は、$|V| < \lambda$のとき出力が正確にゼロになることである。
+これにより、LASSOがスパース解（多くの成分がゼロ）を生成するメカニズムが理解できる。
+入力$V$が閾値$\lambda$より小さい場合、ノイズと判断してゼロに縮退させ、
+閾値を超える場合は$\lambda$だけシュリンクさせた値を出力する。
+\begin{equation}
+\begin{aligned}
+m_k = \frac{\partial}{\partial a_k}(\frac{1}{\beta}\log Z_k)= x_k^*=S_\frac{\lambda}{b_k}\\
+\beta(V_k-m_k^2) = \frac{\partial^2}{\partial a_k^2}(\frac{1}{\beta}\log Z_k) =\frac{\partial x_k^*}{\partial a_k} = S_\frac{\lambda}{b_k}'(\frac{a_k}{b_k})\frac{1}{b_k}\\
+V_k = m_k^2 + \underbrace{\frac{1}{\beta b_k} S_\frac{\lambda}{b_k}'(\frac{a_k}{b_k})}_{\rightarrow 0}
+\end{aligned}
+\end{equation}
+よって
+\begin{equation}
+\begin{aligned}
+a_\mu = \sum_k a_{\mu k}S_{\frac{\lambda}{b_k}}(\frac{a_k}{b_k})-\frac{1}{N}\sum_kS'_{\frac{\lambda}{\beta}}(\frac{a_k}{b_k})(\frac{y_\mu -a_\mu}{1+V_\mu})\\
+a_k  = \sum_\mu a_{\mu k}(\frac{y_\mu-a_\mu}{1+V_\mu})+ \frac{\alpha}{1+ V_\mu}S_{\frac{\lambda}{b_k}}(\frac{a_k}{b_k})\\
+<x_k > = m_k = S_{\frac{\lambda}{b_k}}(\frac{1}{\alpha}\sum_\mu a_{\mu k}(y_\mu - \sum a_{\mu k} m_k) + m_k)
+\end{aligned}
+\end{equation}
+以上のように、LASSOの場合も、Ridge回帰と同様にAMPの枠組みで更新式が導出できる。
+重要な違いは、線形な更新式が軟判定閾値関数による非線形な更新式に置き換わることである。
+
+\subsection{近接勾配法}
+
+AMPの更新式は、近接勾配法（proximal gradient method）と呼ばれる最適化手法と密接に関係している。
+近接勾配法は、目的関数が滑らかな項$g(\boldsymbol{x})$と非滑らかな正則化項$\phi(\boldsymbol{x})$の和として
+\begin{equation}
+\min_{\boldsymbol{x}}\left(g(\boldsymbol{x}) + \phi(\boldsymbol{x})\right) 
+= \min_{\boldsymbol{x}}\left(\sum_\mu f_\mu(\boldsymbol{a}_\mu^T \boldsymbol{x}) + \sum_k \phi_k(x_k)\right)
+\end{equation}
+と書けるときに有効な手法である。
+
+滑らかな部分$g(\boldsymbol{x}) = \sum_\mu f_\mu(\boldsymbol{a}_\mu^T \boldsymbol{x})$に対して、
+勾配とヘッセ行列は
+\begin{equation}
+\frac{\partial g}{\partial \boldsymbol{x}}= \sum_\mu \frac{\partial f_\mu}{\partial u_\mu}\boldsymbol{a}_\mu, \quad
+H = \sum_\mu \frac{\partial^2 f_\mu}{\partial u_\mu^2}\boldsymbol{a_\mu}\boldsymbol{a_\mu}^T
+\end{equation}
+で与えられる。
+
+$g(\boldsymbol{x})$のテイラー展開を用いて、
+\begin{equation}
+\begin{aligned}
+g(\boldsymbol{x}) &= g(\boldsymbol{x_0})+(\frac{\partial g}{\partial \boldsymbol{x}})^T(\boldsymbol{x}-\boldsymbol{x_0})+\frac{1}{2}(\boldsymbol{x}-\boldsymbol{x_0})^TH(\boldsymbol{x}-\boldsymbol{x_0})+\cdots\\
+&≤g(\boldsymbol{x_0})+(\frac{\partial g}{\partial \boldsymbol{x}})^T(\boldsymbol{x}-\boldsymbol{x_0})+ \frac{a}{2}\|\boldsymbol{x}-\boldsymbol{x}_0\|_2^2
+\end{aligned}
+\end{equation}
+\begin{equation}
+\begin{aligned}
+g(\boldsymbol{x})-g(\boldsymbol{x}_0) 
+&= \int_{\boldsymbol{x}_0}^\boldsymbol{x}g'(\boldsymbol{t})d\boldsymbol{t}\\
+&= g'(\boldsymbol{x}_{0})^T (\boldsymbol{x}-\boldsymbol{x}_0)+\int_{\boldsymbol{x}_0}^\boldsymbol{x}(g'(\boldsymbol{t})-g'(\boldsymbol{x}_0))d\boldsymbol{t}\\
+&= g'(\boldsymbol{x}_{0})^T (\boldsymbol{x}-\boldsymbol{x}_0) + \int_0^1(g'(\boldsymbol{t})- g'(\boldsymbol{x}_0))^T(\boldsymbol{x}-\boldsymbol{x}_0)dt\quad (\boldsymbol{t}= \boldsymbol{x}_0 + t(\boldsymbol{x}-\boldsymbol{x}_0))\\
+&≤ g'(\boldsymbol{x}_0)^T(\boldsymbol{x}-\boldsymbol{x}_0 )+\int_0^1\|g'(\boldsymbol{t})-g'(\boldsymbol{x}_0)\|_2\|\boldsymbol{x}-\boldsymbol{x}_0\|_2dt
+\end{aligned}
+\end{equation}
+リプシッツ連続の仮定
+\begin{equation}
+\begin{aligned}
+\|F(\boldsymbol{x})-F(\boldsymbol{y}))\| ≤L\|\boldsymbol{x}-\boldsymbol{y}\|
+\end{aligned}
+\end{equation}
+をおくと、
+\begin{equation}
+\begin{aligned}
+\|g'(\boldsymbol{t})-g'(\boldsymbol{x}_0)\|_2 ≤ a\|\boldsymbol{x}-\boldsymbol{x}_0\|t\\
+\min_\boldsymbol{x}(\sum_\mu f_\mu(\boldsymbol{a_\mu}^T\boldsymbol{x})+\sum_k \phi_k(x_k))
+\min_\boldsymbol{x}(\frac{1}{2}a\|\boldsymbol{x}-\boldsymbol{x}_0+\frac{1}{a}g'(\boldsymbol{x}_0)\|_2^2+ \sum_k \phi_k(x_k))
+\end{aligned}
+\end{equation}
+近接写像
+\begin{equation}
+\begin{aligned}
+Prox_\phi(V) = \arg \min_{\boldsymbol{x}}(\frac{1}{2}(x-V)^2+\phi(V))
+\end{aligned}
+\end{equation}
+を用いると、
+\begin{equation}
+\begin{aligned}
+x_k^* = Prox_{\frac{\phi}{a}}(x_k^0-\frac{1}{a}\sum_\mu a_{\mu k}\frac{\partial f_\mu}{\partial u})
+\end{aligned}
+\end{equation}
+Ridge回帰
+\begin{equation}
+\begin{aligned}
+f_\mu()u=\frac{1}{2}(y_\mu-u)^2\\
+\frac{\partial f_\mu}{\partial u}= -(y_\mu -u)\\
+\phi_k(x_k) =  \frac{\lambda}{2}x_k^2\\
+\end{aligned}
+\end{equation}
+LASSO回帰
+\begin{equation}
+\begin{aligned}
+\phi_k(x_k)=\lambda\|x_k\|_1\\
+Prox_{\frac{\phi}{a}}(V)=\arg \min_{\boldsymbol{x}}(\frac{1}{2}(x-V)^2+\frac{\lambda}{a}\|x\|_1)=S_{\frac{\lambda}{a}}(V)
+\end{aligned}
+\end{equation}
+よって
+\begin{equation}
+\begin{aligned}
+V_k = x_k^0 + \frac{1}{a}\sum_\mu a_{\mu k}(y_\mu - \sum_{k'}a_{\mu k'}x_{k'}^0)\\
+x_k = S_{\frac{\lambda}{a}}(V_k)
+\end{aligned}
+\end{equation}
+この更新式は、勾配降下ステップ$V_k$を計算した後、
+近接写像（軟判定閾値処理）を適用する二段階の手続きとなっている。
+AMPは、この近接勾配法にOnsager反跳項を追加したものと解釈できる。
+
+\subsection{状態発展法}
+
+状態発展法（State Evolution）は、AMPアルゴリズムの大規模系極限$N\to\infty$における
+漸近的な振る舞いを正確に記述する理論的枠組みである。
+この手法により、各反復ステップでの推定誤差の発展を低次元の決定論的な方程式で追跡できる。
+
+LASSO回帰の近接勾配法を例に、状態発展を導出する。
+反復更新式は
+\begin{equation}
+\begin{aligned}
+V_k^t 
+&= x_k^t + \frac{1}{a}\sum_\mu a_{\mu k}(\underbrace{y_\mu}_{\sum a_{\mu k'}x_{k'}^0} - \sum_{k'}a_{\mu k'}x_{k'}^t)\\
+&=x_k^0+\underbrace{\frac{1}{a}\left(\sum_\mu \sum_{k'}a_{\mu k}a_{\mu k'}-a\sum_{k'}\delta_{kk'}\right)(x_{k'}^0-x_{k'}^t)}_{r_k^t}\\
+x_k^{t+1} &= S_{\frac{\lambda}{a}}(V_k^t)
+\end{aligned}
+\end{equation}
+と書ける。ここで、$y_\mu = \sum_{k'}a_{\mu k'}x_{k'}^0$は真の信号から生成された観測である。
+第二式の変形により、更新が真の信号$x_k^0$にノイズ項$r_k^t$を加えたものに
+軟判定閾値処理を施す形になっていることがわかる。
+
+大規模系での性能を評価するため、以下の秩序パラメータを導入する：
+\begin{equation}
+\begin{aligned}
+Q(t) &= \frac{1}{N}\sum_k(x_k^t)^2 \xrightarrow{N\to\infty}[(x^t)^2]_r=\int drP(r)S_\frac{\lambda}{a}^2(x^0 + r)\\
+m(t)&= \frac{1}{N}\sum_k x_k^0 x_k^t\xrightarrow{N\to\infty}[x^t x^0]= \int drP(r)x^0S_\frac{\lambda}{a}^2(x^0 + r)\\
+MSE(t)&=\frac{1}{N}\sum_k(x_k^0-x_k^t)^2= Q(t)-2m(t)+\rho =\sigma(t)^2\quad[\rho=\frac{K}{N}]
+\end{aligned}
+\end{equation}
+rの分布$(a_{\mu k}\sim\mathcal{N}(0,\frac{1}{N}))$
+\begin{equation}
+\begin{aligned}
+[r_k^2]_A 
+&= \frac{1}{a}(\sum_\mu\sum_{k'}\underbrace{[a_{\mu k'}a_{\mu k'}]_A}_{\frac{1}{N}\delta_{kk'}}-a\sum_{k'}\delta_{kk'}(x_k^0-x_{k'}^t)\\
+&=\frac{1}{a}(\alpha -a)\sum_{k'}\delta_{kk'}(x_{k'}^0-x_{k'}^t)\\
+&= \frac{1}{a}(\alpha-a)(x_k^0-x_k^t)=0\\
+[(r_k^t)^2]_A 
+&= \frac{1}{a^2}(\sum_{\mu \mu'}\sum_{kk'}\underbrace{a_{\mu k}a_{\mu k''}a_{\mu' k}a_{\mu' k''}}_{(i)}-2a\sum_\mu \sum_{k'}a_{\mu k}a_{\mu k'}\sum_k' \delta_{kk''}+a^2\sum_{k'k''}\delta_{kk'}\delta_{kk''}(x_{k'}^0-x_{k'}^t)(x_{k''}^0-x_{k''}^t)\\
+&= \frac{1}{a^2}((a-\alpha)^2\sum_{k'k''}(x_{k'}^0-x_{k'}^t)(x_{k''}^0-x_{k''}^t)+\alpha\frac{1}{N}\sum_{k'}(x_{k'}^0-x_{k'}^t)(x_{k'}^0-x_{k'}^t))\\
+&=\frac{1}{\alpha}\sigma(t)^2\\
+r_k^t&= \sqrt{\frac{1}{\alpha}\sigma(t)^2}z z\sim \mathcal{N}(0,1)
+\end{aligned}
+\end{equation}
+
+\begin{equation}
+\begin{aligned}
+P(A) = (\sqrt{\frac{N}{2 \pi}}^{MN})
+\end{aligned}
+\end{equation}
+
+\begin{equation}
+\begin{aligned}
+(i) = \begin{cases}
+\frac{1}{N^2}\delta_{kk'}\delta_{kk''}\xrightarrow{\sum_{\mu \neq \mu'}} \frac{M(M-1)}{N^2}\delta_{kk'}\delta_{kk''}=\alpha^2\delta_{kk'}\delta_{kk''}-\underbrace{\frac{\alpha}{N}\delta_{kk'}\delta_{kk''}}_{\rightarrow 0}&(\mu \neq \mu')\\
+\frac{1}{N^2}\delta_{k'k''} \xrightarrow {\sum_{\mu = \mu'},\sum_{k'=k''}}\frac{M}{N^2}\sum_{k'}\delta_{k'k''} &(\mu = \mu',k\neq k',k'=k'') 
+\end{cases}
+\end{aligned}
+\end{equation}
+
+よって
+\begin{equation}
+\begin{aligned}
+Q(t)&=\left[\int \mathrm{D}zS_{\frac{\lambda}{\alpha}}^2(x_0+\sqrt{\frac{1}{\alpha}\sigma(t)^2}z)\right]_{x_0}\\
+m(t) &= \left[\int \mathrm{D}z x^0S_{\frac{\lambda}{\alpha}}(x_0 + \sqrt{\frac{1}{\alpha}\sigma(t)^2}z)\right]_{x_0} 
+\end{aligned}
+\end{equation}
+これらの式が状態発展方程式であり、反復$t$における性能を完全に特徴付ける。
+重要な点は、$N\to\infty$の極限で、個々の成分$x_k^t$の振る舞いが、
+真の値$x_k^0$にガウスノイズ$\sim\mathcal{N}(0,\sigma^2(t)/\alpha)$を加えたものとして
+統計的に記述できることである。
+
+例として、Bernoulli-Gaussian事前分布
+\begin{equation}
+\begin{aligned}
+P(x^0) = (1-\rho) \delta(x^0)+\rho\frac{1}{\sqrt{2 \pi}}\exp\left(-\frac{1}{2}(x^0)^2\right)
+\end{aligned}
+\end{equation}
+を考えると、状態発展方程式は
+\begin{equation}
+\sigma^2(t) = \left[\int \mathrm{D}z \left(x^0- S_{\frac{\lambda}{\alpha}}\left(x^0+\sqrt{\frac{\sigma^2(t)}{\alpha}}z\right)\right)^2\right]_{x_0}
+\end{equation}
+となる。ここで$[\cdot]_{x_0}$は事前分布$P(x^0)$に関する期待値を表す。
+この方程式を反復的に解くことで、アルゴリズムの収束性能を予測できる。
+
+\subsubsection{LASSOの統計力学的解析}
+
+状態発展法で得られた結果は、レプリカ法による統計力学的解析と厳密に一致することが知られている。
+ここでは、LASSOの最適化問題
+\begin{equation}
+\begin{aligned}
+E(\boldsymbol{x})=\frac{1}{2}\|\boldsymbol{y}-A\boldsymbol{x}\|_2^2+\lambda\|x\|_1 \quad \boldsymbol{y}=A\boldsymbol{x}_0
+\end{aligned}
+\end{equation}
+に対応する分配関数
+\begin{equation}
+Z = \int d\boldsymbol{x} \exp\left(-\frac{\beta}{2}\|\boldsymbol{y}-A\boldsymbol{x}\|_2^2-\beta\lambda\|\boldsymbol{x}\|_1\right)
+\end{equation}
+を考える。$\beta\to\infty$の極限で、分配関数は最適解に集中する。
+
+配位平均（ランダム行列$A$と真の信号$\boldsymbol{x}_0$に関する平均）を
+\begin{equation}
+\begin{aligned}
+P(A )&= \left(\sqrt{\frac{N}{2\pi}}\right)^{MN} \exp\left(-\frac{N}{2}\sum_{\mu k}A_{\mu k}^2\right)\\
+P(x_0) &= (1-\rho)\delta(x_0)+\rho\frac{1}{\sqrt{2 \pi}}\exp\left(-\frac{1}{2}x_0^2\right)
+\end{aligned}
+\end{equation}
+に関して取る。
+
+自己平均性により、大規模系$N\to\infty$では自由エネルギー密度が確定的な値に収束する：
+\begin{equation}
+\begin{aligned}
+-\frac{\beta F}{N}\rightarrow\frac{1}{N}[\log Z]_{A,x_0}
+\end{aligned}
+\end{equation}
+
+レプリカ法を用いて、この配位平均を計算する：
+\begin{equation}
+\begin{aligned}
+[\log Z] = \lim_{n\to0} \frac{[Z^n]-1}{n}
+\end{aligned}
+\end{equation}
+\begin{equation}
+\begin{aligned}
+[Z^n]=[\prod_{a=1}^n \int d \boldsymbol{x}_a\exp(-\frac{\beta}{2}\sum_{\mu=1}^N(y_\mu-\boldsymbol{a_\mu}^T\boldsymbol{x_a})^2-\beta\lambda\|\boldsymbol{x_a}\|)]_{A,x_0}
+\end{aligned}
+\end{equation}
+\begin{equation}
+\begin{aligned}
+u_\mu^a = \boldsymbol{a_\mu}^T\boldsymbol{x_a}\quad(a=0,1\dots n)\\
+[u_\mu^a]=[\boldsymbol{a_\mu}^T]_A\boldsymbol{x_a}=0\\
+[u_\mu^au_\mu^b]=\boldsymbol{x_a}^T[\boldsymbol{a_\mu}\boldsymbol{a_\mu}^T]\boldsymbol{x_b}=\frac{1}{N}\sum_{kk'}x_{ak}\delta_{kk'}x_{bk'}=\frac{1}{N}\sum_k x_{ak}x_{bk} \equiv Q_{ab}
+\end{aligned}
+\end{equation}
+\begin{equation}
+\begin{aligned}
+P(\boldsymbol{u})=\frac{1}{\sqrt{(2\pi)^n\det (\boldsymbol{Q})}}\exp(-\frac{1}{2}\boldsymbol{u}^T\boldsymbol{Q}^{-1}\boldsymbol{u})
+\end{aligned}
+\end{equation}
+\begin{equation}
+\begin{aligned}
+[Z^n]= \int dQ \sum_{a=1}^n\int d\boldsymbol{x_a}\exp(\beta\lambda\|\boldsymbol{x_a}\|_1)\prod_{ab}\delta(NQ_{ab}-\boldsymbol{x_a}^T\boldsymbol{x_b})×[\exp(-\frac{\beta}{2}\sum_\mu(u^0-u^a)^2)]_{\boldsymbol{u\boldsymbol{x}_0}}
+\end{aligned}
+\end{equation}
+
+レプリカ間の重なり行列$Q_{ab} = \frac{1}{N}\sum_k x_{ak}x_{bk}$を導入し、
+レプリカ対称性（RS）を仮定する。
+圧縮センシングのような問題では、一般にRS解が正しい解を与えることが知られている。
+これはSK模型の低温相のようなレプリカ対称性の破れが起こらないことを意味する。
+
+秩序パラメータとして、以下を定義する：
+\begin{itemize}
+\item レプリカ間の重なり（$a,b = 1,\dots,n$）：
+\begin{equation}
+Q_{ab} = \frac{1}{N}\sum_{k=1}^N x_{ak}x_{bk}
+\end{equation}
+\item 真の信号$\boldsymbol{x}_0$（添字$a=0$で表す）とレプリカの重なり：
+\begin{equation}
+m = \frac{1}{N}\sum_{k=1}^N x_k^0 x_k^a \quad (a=1,\dots,n)
+\end{equation}
+\item 真の信号の自己重なり：
+\begin{equation}
+\rho = \frac{1}{N}\sum_{k=1}^N (x_k^0)^2
+\end{equation}
+\end{itemize}
+
+レプリカ対称性の仮定の下では、重なり行列$Q_{ab}$は以下の構造を持つ：
+\begin{equation}
+\begin{aligned}
+Q_{ab}={\begin{cases}
+    Q, & a= b \quad (a,b=1,\dots,n) \quad \text{（自己重なり）}\\
+    q, & a \neq b \quad (a,b=1,\dots,n) \quad \text{（異なるレプリカ間）}
+\end{cases}}
+\end{aligned}
+\end{equation}
+さらに、レプリカ対称性により、全てのレプリカ$a=1,\dots,n$に対して
+真の信号との重なり$m$は等しい値をとる。
+次に、観測行列の各行$\boldsymbol{a}_\mu$とベクトル$\boldsymbol{x}_a$の内積
+\begin{equation}
+u_\mu^a = \boldsymbol{a}_\mu^T \boldsymbol{x}_a \quad (a=0,1,\dots,n)
+\end{equation}
+を考える。ここで$a=0$は真の信号、$a=1,\dots,n$はレプリカを表す。
+行列$A$の各成分が独立同分布$\mathcal{N}(0,1/N)$に従うとき、
+中心極限定理により$u_\mu^a$はガウス分布に従う。
+
+その期待値と共分散は秩序パラメータで表される：
+\begin{align}
+u^a
+&= \sqrt{q}\, z + \sqrt{Q-q}\, x_a,
+\qquad z, x_a \sim \mathcal{N}(0,1),
+\\
+u^0
+&= \sqrt{\frac{m^2}{q}}\, z
+  + \sqrt{\rho - \frac{m^2}{q}}\, x_0,
+\end{align}
+
+\begin{equation}
+[\cdots]_{\boldsymbol{u}}
+=
+\left[
+\int \mathrm{D}z \int \mathrm{D}x_0
+\left(
+\int \mathrm{D}x \,
+\exp\left(
+-\frac{\beta}{2}(\cdots)^2
+\right)
+\right)^n
+\right]^N .
+\end{equation}
+
+ガウス積分を実行するため、適切な独立変数への変換を行う。
+レプリカ$a \geq 1$に対して：
+\begin{equation}
+u_\mu^a = \sqrt{q}\,z + \sqrt{Q-q}\,x_a, \quad z,x_a\sim \mathcal{N}(0,1),
+\end{equation}
+真の信号に対して：
+\begin{equation}
+u_\mu^0 = \sqrt{m^2/q}\,z+\sqrt{\rho-m^2/q}\,x_0, \quad x_0 \sim \mathcal{N}(0,1).
+\end{equation}
+ここで$z$は全てのレプリカで共通のガウス変数であり、
+$x_a$（$a=0,1,\dots,n$）はそれぞれ独立なガウス変数である。
+
+観測誤差$t_\mu^a = u_\mu^0 - u_\mu^a = \boldsymbol{a}_\mu^T(\boldsymbol{x}_0-\boldsymbol{x}_a)$
+を考えると、
+\begin{equation}
+\begin{aligned}
+\boldsymbol{y}-A\boldsymbol{x}\\
+t_\mu^a = u_\mu^0-u_\mu^a \equiv\boldsymbol{a_\mu}^T(\boldsymbol{x_0}-\boldsymbol{x_a})
+\end{aligned}
+\end{equation}
+レプリカ対称性の仮定の下で、$a=b$の場合のみ考えれば十分である。
+したがって、
+\begin{equation}
+t_\mu^a = \sqrt{\rho-2m+Q}\,z, \quad z\sim \mathcal{N}(0,1)
+\end{equation}
+とパラメータ化できる。
+
+エネルギー項の配位平均を計算すると、
+\begin{equation}
+\begin{aligned}
+\left[\exp\left(-\frac{\beta}{2}\sum_{\mu=1}^M (y_\mu - \boldsymbol{a}_\mu^T\boldsymbol{x}_a)^2\right)\right]_A
+&= \left[\exp\left(-\frac{\beta}{2}\sum_{\mu=1}^M (t_\mu^a)^2\right)\right]_{t} \\
+&= \left(\int \mathrm{D}z \exp\left(-\frac{\beta M}{2N}(\rho-2m+Q)z^2\right)\right)^N \\
+&= \left(1 - \frac{\beta \alpha}{2}(\rho-2m+Q) + O(n^2)\right)^N
+\end{aligned}
+\end{equation}
+ここで$\alpha = M/N$は測定比である。
+
+エントロピー項との寄与を合わせて、$n\to 0$の極限を取ると、
+秩序パラメータ$q, Q, m$に対する鞍点方程式が得られる。
+$\beta\to\infty$の極限（ゼロ温度、最適化問題に対応）でこれらを解くと、
+状態発展法で得られた平均二乗誤差
+\begin{equation}
+\mathrm{MSE} = Q - 2m + \rho
+\end{equation}
+と完全に一致する結果が得られる。
+
+
+すなわち、レプリカ法の秩序パラメータと状態発展法の秩序パラメータには以下の対応がある：
+\begin{itemize}
+\item $q$：異なるレプリカ間の重なり $\leftrightarrow$ 状態発展法での$m^2(t)$
+\item $Q$：同一レプリカ内の自己重なり $\leftrightarrow$ 状態発展法での$Q(t)$
+\item $m$：真の信号とレプリカの重なり $\leftrightarrow$ 状態発展法での$m(t)$
+\end{itemize}
+
+この対応により、動的なアルゴリズムであるAMPの性能が、
+統計力学的解析であるレプリカ法と厳密に一致することが保証される。
+
+\section{Stochastic Block Modelへの応用}
+
+本節では、ネットワーク科学における基本的なモデルであるSBMを扱う。
+レプリカ法やBPなどの統計物理の手法が適用できる。
+まずSBMの定義とスピングラス模型との対応を述べ、次に前節で導入した各手法（BP、AMP、状態発展法、レプリカ法）をSBMに適用する。
+
+\subsection{SBMの定義}
+SBMは$N$個のノードが$q$個のコミュニティに分割されており、
+各ノード$i$はラベル$\sigma_i \in \{1,2,\dots,q\}$を持つ。
+エッジ$(i,j)$が存在する確率は、両端のノードが同じコミュニティに属するか否かで決まる：
+\begin{equation}
+P(A_{ij}=1|\sigma_i,\sigma_j) = 
+\begin{cases}
+\frac{c_{in}}{N} & \text{if } \sigma_i = \sigma_j \\
+\frac{c_{out}}{N} & \text{if } \sigma_i \neq \sigma_j
+\end{cases}
+\end{equation}
+で与えられる。$c_{in} > c_{out}$のとき、同じコミュニティ内のノード間にエッジができやすい。
+簡単のため、以下では$q=2$の場合を考える。
+
+\subsection{SBMのハミルトニアンとVB模型との対応}
+
+\subsubsection{SBMからスピン模型への変換}
+
+SBMのコミュニティ検出問題は、スピンガラス模型の基底状態探索問題として定式化できる。
+隣接行列$A_{ij}$が与えられたとき、ラベル$\boldsymbol{\sigma}$の事後確率は
+\begin{equation}
+P(\boldsymbol{\sigma}|\boldsymbol{A}) \propto P(\boldsymbol{A}|\boldsymbol{\sigma})P(\boldsymbol{\sigma})
+\end{equation}
+と書ける。ベイズの定理により、最尤推定は尤度$P(\boldsymbol{A}|\boldsymbol{\sigma})$を最大化する問題となる。
+
+$q=2$のコミュニティの場合、Isingスピン$\sigma_i \in \{+1, -1\}$でコミュニティのラベルを表す。
+各エッジの生成確率は
+\begin{equation}
+P(A_{ij}=1|\sigma_i,\sigma_j) = 
+\begin{cases}
+\frac{c_{in}}{N} = p_{++} & \text{if } \sigma_i\sigma_j = +1 \\
+\frac{c_{out}}{N} = p_{+-} & \text{if } \sigma_i\sigma_j = -1
+\end{cases}
+\end{equation}
+で与えられる。
+
+尤度関数は
+\begin{equation}
+\begin{aligned}
+P(\boldsymbol{A}|\boldsymbol{\sigma}) 
+&= \prod_{i<j} P(A_{ij}|\sigma_i,\sigma_j) \\
+&= \prod_{i<j} \left[p_{\sigma_i\sigma_j}\right]^{A_{ij}} \left[1-p_{\sigma_i\sigma_j}\right]^{1-A_{ij}}
+\end{aligned}
+\end{equation}
+対数尤度を計算すると、
+\begin{equation}
+\begin{aligned}
+\log P(\boldsymbol{A}|\boldsymbol{\sigma}) 
+&= \sum_{i<j} \Bigl[A_{ij}\log p_{\sigma_i\sigma_j} + (1-A_{ij})\log(1-p_{\sigma_i\sigma_j})\Bigr]\\
+&= \sum_{i<j} A_{ij}\log\frac{p_{\sigma_i\sigma_j}}{1-p_{\sigma_i\sigma_j}} + \sum_{i<j}\log(1-p_{\sigma_i\sigma_j})
+\end{aligned}
+\end{equation}
+が得られる。第二項は$\boldsymbol{\sigma}$に依存しないため無視できる。
+
+スパース極限$c_{in}, c_{out} \ll N$では、$1-p \approx 1$より
+\begin{equation}
+\log P(\boldsymbol{A}|\boldsymbol{\sigma}) \propto \sum_{i<j} A_{ij}\log p_{\sigma_i\sigma_j}
+\end{equation}
+
+ここで、エッジの有無をスピン配置の関数として表すため、
+\begin{equation}
+\log p_{\sigma_i\sigma_j} = \log p_{++} \cdot \frac{1+\sigma_i\sigma_j}{2} + \log p_{+-} \cdot \frac{1-\sigma_i\sigma_j}{2}
+\end{equation}
+を用いると、
+\begin{equation}
+\begin{aligned}
+\log P(\boldsymbol{A}|\boldsymbol{\sigma}) 
+&\propto \sum_{i<j} A_{ij} \left[\frac{\log p_{++} + \log p_{+-}}{2} + \frac{\log p_{++} - \log p_{+-}}{2}\sigma_i\sigma_j\right]\\
+&= \text{const.} + \sum_{i<j} A_{ij} \cdot \frac{1}{2}\log\frac{p_{++}}{p_{+-}} \cdot \sigma_i\sigma_j
+\end{aligned}
+\end{equation}
+
+したがって、SBMの最尤推定問題は、実効的なスピングラス模型
+\begin{equation}
+-\beta H(\boldsymbol{\sigma}) = \sum_{i<j} J_{ij}A_{ij}\sigma_i\sigma_j
+\end{equation}
+の基底状態探索に帰着される。ここで、
+\begin{equation}
+J_{ij} = \frac{1}{2}\log\frac{c_{in}}{c_{out}} = \frac{1}{2}\log\frac{p_{++}}{p_{+-}}
+\end{equation}
+は、コミュニティ内とコミュニティ間のエッジ生成確率の比の対数で決まる実効的な結合定数である。
+
+\subsubsection{ゲージ変換とVB模型への対応}
+
+SBMから得られるスピン模型は、隣接行列$A_{ij}$が与えられた系である一方、Viana-Bray (VB)模型は結合定数$J_{ij}$自体がランダム変数である系である。
+真のコミュニティラベルを$\boldsymbol{\sigma}^0 = (\sigma_1^0, \dots, \sigma_N^0)$とする。
+SBMの隣接行列は、この真のラベルから確率的に生成される：
+\begin{equation}
+\langle A_{ij} \rangle = p_{\sigma_i^0\sigma_j^0}
+\end{equation}
+
+ゲージ変換
+\begin{equation}
+\tilde{\sigma}_i = \sigma_i^0 \sigma_i
+\end{equation}
+を導入すると、ハミルトニアンは
+\begin{equation}
+\begin{aligned}
+H(\boldsymbol{\sigma}) 
+&= -\sum_{i<j} J A_{ij} \sigma_i \sigma_j \\
+&= -\sum_{i<j} J A_{ij} \sigma_i^0 \sigma_j^0 \tilde{\sigma}_i \tilde{\sigma}_j \\
+&= -\sum_{i<j} \tilde{J}_{ij} \tilde{\sigma}_i \tilde{\sigma}_j
+\end{aligned}
+\end{equation}
+と書き直される。ここで、
+\begin{equation}
+\tilde{J}_{ij} = J A_{ij} \sigma_i^0 \sigma_j^0
+\end{equation}
+は、ゲージ変換された結合定数である。
+
+$A_{ij}$の統計的性質を考えると、
+\begin{equation}
+\begin{aligned}
+\langle \tilde{J}_{ij} \rangle &= J \langle A_{ij} \rangle \sigma_i^0 \sigma_j^0 = J p_{\sigma_i^0\sigma_j^0} \sigma_i^0 \sigma_j^0 \\
+\langle \tilde{J}_{ij}^2 \rangle &= J^2 \langle A_{ij}^2 \rangle = J^2 \langle A_{ij} \rangle = J^2 p_{\sigma_i^0\sigma_j^0}
+\end{aligned}
+\end{equation}
+
+ここで、SBMの対称性を用いると、
+\begin{equation}
+\begin{aligned}
+p_{++} = p_{--} &= \frac{c_{in}}{N}, \\
+p_{+-} = p_{-+} &= \frac{c_{out}}{N}
+\end{aligned}
+\end{equation}
+であり、コミュニティが等しいサイズの場合、平均を取ると
+\begin{equation}
+\langle \tilde{J}_{ij} \rangle = 0, \quad 
+\langle \tilde{J}_{ij}^2 \rangle = J^2 \frac{c_{in}+c_{out}}{2N} = \frac{J^2 c}{N}
+\end{equation}
+ここで$c = (c_{in}+c_{out})/2$は平均次数である。
+
+これは、VB模型の結合定数
+\begin{equation}
+J_{ij}^{VB} \sim \mathcal{N}(0, \frac{J^2 c}{N})
+\end{equation}
+と同じ分散を持つ。したがって、適切なゲージ変換により、
+SBMの推論問題はVB模型の基底状態探索問題と統計的に等価になる。
+
+\subsubsection{VB模型の定義とSBMとの関係}
+
+Viana-Bray (VB)模型は、Bethe格子（ランダム正則グラフ）上のスピングラス模型として定義される：
+\begin{equation}
+H_{VB} = -\sum_{(i,j)\in E} J_{ij}\sigma_i\sigma_j - h\sum_i\sigma_i
+\end{equation}
+ここで、各ノード$i$の次数は平均的に$c$であり（ポアソン分布に従う）、
+エッジ$(i,j)$に対する結合定数$J_{ij}$は独立同分布のガウス乱数：
+\begin{equation}
+J_{ij} \sim \mathcal{N}(0, \frac{J^2}{c})
+\end{equation}
+
+この規格化により、各スピンが受ける有効場
+\begin{equation}
+h_i^{eff} = \sum_{j\in\partial i} J_{ij}\sigma_j
+\end{equation}
+の分散が次数$k_i$によらず$O(1)$となる：
+\begin{equation}
+\mathrm{Var}[h_i^{eff}] = k_i \cdot \frac{J^2}{c} \approx J^2
+\end{equation}
+
+SBMとVB模型の対応をまとめると：
+\begin{center}
+\begin{tabular}{lll}
+\hline
+& SBM & VB模型 \\
+\hline
+スピン変数 & $\sigma_i$ (コミュニティラベル) & $\sigma_i$ (Isingスピン) \\
+グラフ構造 & 隣接行列$A_{ij}$ (データ) & ランダムグラフ (配位平均) \\
+結合定数 & $J_{ij} = J A_{ij}$ & $J_{ij} \sim \mathcal{N}(0, J^2/c)$ \\
+平均次数 & $c = (c_{in}+c_{out})/2$ & $c$ (パラメータ) \\
+実効結合 & $J = \frac{1}{2}\log(c_{in}/c_{out})$ & $J$ (パラメータ) \\
+\hline
+\end{tabular}
+\end{center}
+
+この対応により、VB模型で開発されたレプリカ法やキャビティ法の技術を、
+SBMのコミュニティ検出問題に適用できる。
+
+\subsection{Belief Propagation (BP)によるSBM解析}
+
+グラフ$G=(V,E)$上でのBPメッセージは
+\begin{equation}
+\begin{aligned}
+m_{i\to j}^{(t+1)}(\sigma_j) 
+&\propto \sum_{\sigma_i} \exp(\beta J_{ij}\sigma_i\sigma_j + \beta h_i\sigma_i) \\
+&\quad \times \prod_{k\in\partial i\setminus j} m_{k\to i}^{(t)}(\sigma_i)
+\end{aligned}
+\end{equation}
+
+イジングスピンの場合、メッセージを$m_{i\to j} = \tanh(\beta\tilde{h}_{i\to j})$とパラメータ化すると
+\begin{equation}
+\tilde{h}_{i\to j}^{(t+1)} = h_i + \sum_{k\in\partial i\setminus j} \tanh^{-1}(\tanh(\beta J_{ik})\tanh(\beta\tilde{h}_{k\to i}^{(t)}))
+\end{equation}
+
+マージナル確率は
+\begin{equation}
+m_i = \tanh\left(\beta h_i + \beta\sum_{j\in\partial i}J_{ij}\tanh(\tilde{h}_{j\to i})\right)
+\end{equation}
+
+\subsection{Approximate Message Passing (AMP)によるSBM解析}
+
+SBMの隣接行列$A$を観測として、真のラベル$\boldsymbol{x}^0$を推定する問題として定式化：
+\begin{equation}
+A = \frac{1}{\sqrt{N}}\boldsymbol{x}\boldsymbol{x}^T + \text{noise}
+\end{equation}
+
+AMP更新式：
+\begin{equation}
+\begin{aligned}
+\boldsymbol{a}^{(t)} &= A\boldsymbol{m}^{(t)} - b^{(t)}\boldsymbol{m}^{(t-1)} \\
+b^{(t)} &= \frac{1}{N}\sum_i f'(a_i^{(t-1)}) \\
+m_i^{(t+1)} &= f(a_i^{(t)})
+\end{aligned}
+\end{equation}
+
+ここで$f(\cdot)$は非線形活性化関数（例：符号関数、tanh等）
+
+\subsection{状態発展法によるSBM解析}
+
+AMPの大規模極限$N\to\infty$での振る舞いを記述。
+時刻$t$での平均二乗誤差$\sigma^2(t)$の発展方程式：
+\begin{equation}
+\sigma^2(t+1) = \mathbb{E}_{x^0,z}\left[\left(x^0 - f\left(x^0 + \sqrt{\frac{\sigma^2(t)}{\alpha}}z\right)\right)^2\right]
+\end{equation}
+ここで$z\sim\mathcal{N}(0,1)$、$\alpha = M/N$（測定比）
+
+SBMの場合：
+\begin{equation}
+\begin{aligned}
+Q(t) &= \mathbb{E}[f^2(x^0 + \sqrt{\sigma^2(t)/\alpha}\,z)] \\
+m(t) &= \mathbb{E}[x^0 f(x^0 + \sqrt{\sigma^2(t)/\alpha}\,z)] \\
+\sigma^2(t+1) &= Q(t) - 2m(t) + \mathbb{E}[(x^0)^2]
+\end{aligned}
+\end{equation}
+
+\subsection{レプリカ法によるSBM解析：VB模型のレプリカ対称解}
+
+前述のように、SBMのコミュニティ検出問題は、ゲージ変換を通じてVB模型の統計力学と対応する。
+ここでは、VB模型のレプリカ対称(RS)解を詳細に導出し、
+検出可能性の相転移とKesten-Stigum閾値との関係を明らかにする。
+
+\subsubsection{VB模型の分配関数とレプリカ法}
+
+VB模型のハミルトニアンは
+\begin{equation}
+H = -\sum_{(i,j)\in E} J_{ij}\sigma_i\sigma_j - h\sum_i\sigma_i, \quad
+J_{ij} \sim \mathcal{N}(0, \frac{J^2}{c})
+\end{equation}
+で与えられる。ここで、グラフはポアソン分布に従う次数を持つランダムグラフである。
+
+分配関数は
+\begin{equation}
+Z = \sum_{\{\sigma\}} \exp(-\beta H) = \sum_{\{\sigma\}} \exp\left(\beta\sum_{(i,j)\in E} J_{ij}\sigma_i\sigma_j + \beta h\sum_i\sigma_i\right)
+\end{equation}
+
+自由エネルギー密度を求めるため、グラフ構造と結合定数に関する配位平均を取る：
+\begin{equation}
+f = -\frac{1}{\beta N}\mathbb{E}_{G,J}[\log Z]
+\end{equation}
+
+レプリカトリックを用いて、
+\begin{equation}
+\mathbb{E}[\log Z] = \lim_{n\to 0}\frac{\mathbb{E}[Z^n]-1}{n}
+\end{equation}
+
+$n$個のレプリカに対する分配関数は
+\begin{equation}
+Z^n = \sum_{\{\sigma^a\}_{a=1}^n} \exp\left(\beta\sum_{(i,j)\in E}\sum_{a=1}^n J_{ij}\sigma_i^a\sigma_j^a + \beta h\sum_i\sum_a\sigma_i^a\right)
+\end{equation}
+
+結合定数$J_{ij}$に関するガウス平均を取ると、
+\begin{equation}
+\begin{aligned}
+\mathbb{E}_J\left[\exp\left(\beta J_{ij}\sum_a\sigma_i^a\sigma_j^a\right)\right]
+&= \int \frac{dJ_{ij}}{\sqrt{2\pi J^2/c}}\exp\left(-\frac{c J_{ij}^2}{2J^2} + \beta J_{ij}\sum_a\sigma_i^a\sigma_j^a\right)\\
+&= \exp\left(\frac{\beta^2 J^2}{2c}\left(\sum_a\sigma_i^a\sigma_j^a\right)^2\right)
+\end{aligned}
+\end{equation}
+
+\subsubsection{レプリカ対称性の仮定とキャビティ法}
+
+VB模型では、グラフがツリーライクであるため、キャビティ法が有効である。
+エッジ$(i,j)$に対する分配関数の寄与を計算すると、
+\begin{equation}
+\mathbb{E}_{J_{ij}}[Z^n] \propto \exp\left(\frac{\beta^2 J^2}{2c}\sum_{a,b}q_{ij}^{ab}\right)
+\end{equation}
+ここで、
+\begin{equation}
+q_{ij}^{ab} = \frac{1}{N}\sum_k \sigma_k^a\sigma_k^b
+\end{equation}
+はレプリカ$a$と$b$の重なりである。
+
+レプリカ対称性(RS)を仮定すると、
+\begin{equation}
+q_{ij}^{ab} = 
+\begin{cases}
+1, & a=b \\
+q, & a\neq b
+\end{cases}
+\end{equation}
+
+この仮定の下で、1サイトあたりの自由エネルギー密度は
+\begin{equation}
+\begin{aligned}
+-\beta f_{RS}
+&= \frac{\beta^2 c J^2}{4}(1-q^2) - \frac{c}{2}(1-q)\tilde{q} \\
+&\quad + \int \mathrm{D}z\log\left[\int \mathrm{D}y \left(2\cosh(\beta\sqrt{\tilde{q}}y)\right)^c e^{\beta h\sqrt{c}z}\right]
+\end{aligned}
+\end{equation}
+
+ここで、$\tilde{q}$は$q$に共役なパラメータであり、$z,y$はガウス変数である。
+第一項はエネルギー項、第二項はエントロピー制約項、第三項はキャビティ場の寄与である。
+
+\subsubsection{鞍点方程式の導出}
+
+自由エネルギー密度を$q$と$\tilde{q}$で微分してゼロとおくと、鞍点方程式が得られる。
+
+$\partial f/\partial \tilde{q} = 0$より：
+\begin{equation}
+\begin{aligned}
+0 &= -\frac{c}{2}(1-q) + \int \mathrm{D}z \frac{\int \mathrm{D}y (2\cosh(\beta\sqrt{\tilde{q}}y))^c \cdot c \tanh(\beta\sqrt{\tilde{q}}y)\frac{\beta y}{2\sqrt{\tilde{q}}}}{\int \mathrm{D}y (2\cosh(\beta\sqrt{\tilde{q}}y))^c}\\
+&= -\frac{c}{2}(1-q) + \frac{c\beta}{2\sqrt{\tilde{q}}}\int \mathrm{D}z \langle y\tanh(\beta\sqrt{\tilde{q}}y)\rangle_c
+\end{aligned}
+\end{equation}
+
+積分を実行すると、
+\begin{equation}
+q = \int \mathrm{D}z \langle \tanh^2(\beta\sqrt{\tilde{q}}y)\rangle_c
+\end{equation}
+ここで$\langle\cdot\rangle_c$は重み$(2\cosh(\beta\sqrt{\tilde{q}}y))^c$に関する期待値を表す。
+
+$\partial f/\partial q = 0$より：
+\begin{equation}
+\tilde{q} = 2\beta^2 J^2 q
+\end{equation}
+
+これらを組み合わせると、RS解の鞍点方程式は
+\begin{equation}
+\begin{aligned}
+\tilde{q} &= 2\beta^2 J^2 q \\
+q &= \int \mathrm{D}z\int \frac{\mathrm{D}y(2\cosh(\beta\sqrt{\tilde{q}}y))^c}{\int \mathrm{D}y'(2\cosh(\beta\sqrt{\tilde{q}}y'))^c}\tanh^2(\beta\sqrt{\tilde{q}}y)
+\end{aligned}
+\end{equation}
+
+大規模次数極限$c\to\infty$（密結合極限）では、集中不等式により
+\begin{equation}
+q = \int \mathrm{D}z\tanh^2(\beta J\sqrt{q}\,z)
+\end{equation}
+という簡明な形が得られる。これはSK模型のRS解と同じ形である。
+
+\subsubsection{相転移とKesten-Stigum閾値}
+
+秩序パラメータ$q$は、真のコミュニティラベルとの相関（重なり）を表す。
+$q=0$のとき推定は完全にランダムであり、$q>0$のとき非自明な推定が可能である。
+
+$q=0$近傍でテイラー展開すると、
+\begin{equation}
+q \approx (\beta J)^2 \int \mathrm{D}z\, z^2 = (\beta J)^2
+\end{equation}
+
+相転移点は$q$が非自明な解を持つ条件$\beta J = 1$、すなわち
+\begin{equation}
+T_c = J = \frac{1}{2}\log\frac{c_{in}}{c_{out}}
+\end{equation}
+
+これをSBMのパラメータで書き直すと、検出可能性の閾値は
+\begin{equation}
+\frac{c_{in}}{c_{out}} > e^{2/\beta}
+\end{equation}
+
+低温極限$\beta\to\infty$（ゼロ温度、最適推定）では、この条件は
+\begin{equation}
+(c_{in} - c_{out})^2 > 2(c_{in}+c_{out})
+\end{equation}
+となる。これは**Kesten-Stigum閾値**として知られる、
+情報理論的な検出可能性の境界である。
+
+この閾値以下では、いかなる効率的アルゴリズムも
+ランダム推定より有意に良い性能を達成できないことが証明されている。
+
+\subsubsection{SBMへの適用}
+
+VB模型のRS解をSBMに適用すると、以下の対応がつく：
+
+\begin{center}
+\begin{tabular}{lll}
+\hline
+物理量 & VB模型 & SBM \\
+\hline
+実効結合 & $J$ & $J_{\text{eff}} = \frac{1}{2}\log(c_{in}/c_{out})$ \\
+平均次数 & $c$ & $c = (c_{in}+c_{out})/2$ \\
+秩序パラメータ & $q$ (スピン重なり) & 推定精度（真のラベルとの相関） \\
+相転移点 & $\beta J = 1$ & $(c_{in}-c_{out})^2 = 2(c_{in}+c_{out})$ \\
+\hline
+\end{tabular}
+\end{center}
+
+SBMのパラメータ$(c_{in}, c_{out})$を用いると、検出可能性の位相図は
+信号対雑音比(SNR)
+\begin{equation}
+\mathrm{SNR} = \frac{(c_{in}-c_{out})^2}{2(c_{in}+c_{out})}
+\end{equation}
+で特徴づけられる。$\mathrm{SNR} > 1$のとき検出可能、$\mathrm{SNR} < 1$のとき検出不可能である。
+
+レプリカ法による解析から、以下のことが予測される：
+\begin{itemize}
+\item \textbf{検出可能相}（$\mathrm{SNR} > 1$）：秩序パラメータ$q > 0$となり、
+      真のコミュニティラベルとの有意な相関が得られる。
+      BPやTAP方程式などの効率的アルゴリズムが機能する。
+
+\item \textbf{検出不可能相}（$\mathrm{SNR} < 1$）：秩序パラメータ$q = 0$となり、
+      真のラベルとの相関が消失する。
+      いかなるアルゴリズムもランダム推定より良い性能を達成できない。
+
+\item \textbf{相転移点}（$\mathrm{SNR} = 1$）：系の対称性が破れ、
+      臨界現象（感受率の発散、緩和時間の増大など）が現れる。
+      アルゴリズムの収束が遅くなり、計算コストが急増する。
+\end{itemize}
+
+\subsection{Belief Propagation (BP)によるSBM解析}
+
+グラフ$G=(V,E)$上でのBPメッセージは
+\begin{equation}
+\begin{aligned}
+m_{i\to j}^{(t+1)}(\sigma_j) 
+&\propto \sum_{\sigma_i} \exp(\beta J_{ij}\sigma_i\sigma_j + \beta h_i\sigma_i) \\
+&\quad \times \prod_{k\in\partial i\setminus j} m_{k\to i}^{(t)}(\sigma_i)
+\end{aligned}
+\end{equation}
+
+イジングスピンの場合、メッセージを$m_{i\to j} = \tanh(\beta\tilde{h}_{i\to j})$とパラメータ化すると
+\begin{equation}
+\tilde{h}_{i\to j}^{(t+1)} = h_i + \sum_{k\in\partial i\setminus j} \tanh^{-1}(\tanh(\beta J_{ik})\tanh(\beta\tilde{h}_{k\to i}^{(t)}))
+\end{equation}
+
+マージナル確率は
+\begin{equation}
+m_i = \tanh\left(\beta h_i + \beta\sum_{j\in\partial i}J_{ij}\tanh(\tilde{h}_{j\to i})\right)
+\end{equation}
+
+\subsection{Approximate Message Passing (AMP)によるSBM解析}
+
+SBMの隣接行列$A$を観測として、真のラベル$\boldsymbol{x}^0$を推定する問題として定式化すると
+\begin{equation}
+A = \frac{1}{\sqrt{N}}\boldsymbol{x}\boldsymbol{x}^T + \text{noise}
+\end{equation}
+
+AMP更新式は
+\begin{equation}
+\begin{aligned}
+\boldsymbol{a}^{(t)} &= A\boldsymbol{m}^{(t)} - b^{(t)}\boldsymbol{m}^{(t-1)} \\
+b^{(t)} &= \frac{1}{N}\sum_i f'(a_i^{(t-1)}) \\
+m_i^{(t+1)} &= f(a_i^{(t)})
+\end{aligned}
+\end{equation}
+
+ここで$f(\cdot)$は非線形活性化関数である。
+
+\subsection{状態発展法によるSBM解析}
+
+AMPの大規模極限$N\to\infty$での振る舞いを記述する
+時刻$t$での平均二乗誤差$\sigma^2(t)$の発展方程式は
+\begin{equation}
+\sigma^2(t+1) = \mathbb{E}_{x^0,z}\left[\left(x^0 - f\left(x^0 + \sqrt{\frac{\sigma^2(t)}{\alpha}}z\right)\right)^2\right]
+\end{equation}
+ここで$z\sim\mathcal{N}(0,1)$、$\alpha = M/N$（測定比）である
+
+SBMの場合は
+\begin{equation}
+\begin{aligned}
+Q(t) &= \mathbb{E}[f^2(x^0 + \sqrt{\sigma^2(t)/\alpha}\,z)] \\
+m(t) &= \mathbb{E}[x^0 f(x^0 + \sqrt{\sigma^2(t)/\alpha}\,z)] \\
+\sigma^2(t+1) &= Q(t) - 2m(t) + \mathbb{E}[(x^0)^2]
+\end{aligned}
+\end{equation}
+
+\subsection{レプリカ法によるSBM解析：VB模型のレプリカ対称解}
+
+VB模型の自由エネルギー密度（レプリカ対称解）は
+\begin{equation}
+-\beta f_{RS} = \frac{\beta^2 c J^2}{4}(1-q^2) + \frac{c}{2}(1-q)\tilde{q} + c\int \mathrm{D}z\log 2\cosh(\beta\sqrt{\tilde{q}}z)
+\end{equation}
+
+鞍点方程式は
+\begin{equation}
+\begin{aligned}
+\tilde{q} &= 2\beta^2 J^2 q \\
+q &= \int \mathrm{D}z\tanh^2(\beta J\sqrt{q}\,z)
+\end{aligned}
+\end{equation}
+
+SBMの場合、$J$を
+\begin{equation}
+J_{\text{eff}} = \frac{1}{4}\log\frac{c_{in}}{c_{out}}
+\end{equation}
+とすることで対応がつく。
+
+\subsection{数値実験結果と考察}
+
+本研究では、SBMにおけるコミュニティ検出問題に対して、
+Belief Propagation (BP)、Approximate Message Passing (AMP)、および状態発展法（State Evolution, SE）の
+3つの手法を実装し、その性能を比較した。
+以下では、数値実験で観察された各手法の挙動の違いと、その理論的背景について考察する。
+
+\subsubsection{相転移の検出性能}
+
+数値実験の結果、BPと状態発展法は相転移を明確に捉えることができた。
+特に、Kesten-Stigum閾値
+\begin{equation}
+(c_{in} - c_{out})^2 > 2(c_{in} + c_{out})
+\end{equation}
+の近傍において、推定精度が急激に変化する相転移現象が観測された。
+
+状態発展法は理論的な予測であり、大規模極限$N\to\infty$における漸近的な性能を与える。
+実験結果がこの理論曲線とよく一致することは、
+有限サイズの系でも統計力学的な予測が高い精度で成り立つことを示している。
+
+BPも相転移を捉えることができており、特にグラフがループを多く含む場合でも
+実用的な性能を発揮することが確認された。
+これは、BPがグラフ構造を直接利用し、局所的な相関を正確に扱えるためである。
+
+\subsubsection{BP の相転移近傍での不安定性}
+
+一方、BPは相転移点の近傍でメッセージの更新が収束しない、または収束が極めて遅い推定精度が理論予測から系統的にずれるなどの不安定な挙動を示した。
+
+この不安定性の原因は、相転移点近傍でのエネルギー地形の複雑化にあると考えられる。
+相転移点では、複数の準安定状態（メタステーブル状態）が出現し、
+BPの反復更新がこれらの状態間を遷移してしまう。
+特に、SBMのような希薄グラフでは、ループの存在により
+BPの正確性を保証する木構造の仮定が破綻する。
+
+相転移点近傍では、系のコヒーレンス長（相関長）が発散するため、
+局所的な情報伝播だけでは大域的な構造を正しく捉えられなくなる。
+これが、BPの不安定性の根本的な原因である。
+
+\subsubsection{AMP の性能不全とその原因}
+
+最も顕著な結果は、AMPがほとんど機能しなかったことである。
+推定精度の立ち上がりがほとんど見られず、ランダム推定に近い性能しか得られなかった。
+
+この結果は、AMPの導出における仮定とSBMの構造のミスマッチに起因する。
+AMPは以下の条件下で有効性が理論的に保証される
+\begin{enumerate}
+\item 観測行列$A$の各成分が独立同分布（i.i.d.）のガウス乱数である
+\item 行列がdense（密）であり、各行・各列に$O(N)$個の非ゼロ成分が存在する
+\item 大規模極限$N\to\infty$において、中心極限定理が適用できる
+\end{enumerate}
+
+しかし、SBMの隣接行列は各ノードの次数は$O(\log N)$または$O(1)$であり、行列の非ゼロ成分の割合は$O(1/N)$と極めて小さく、行列要素は$\{0,1\}$の離散値をとり、ガウス分布から逸脱しており隣接行列の各要素は独立ではなく、グラフの次数制約などの大域的な制約に従っている。
+AMPの導出において本質的な役割を果たすOnsager反跳項は、各ノードが$O(N)$個の隣接ノードを持つことを前提としている。
+希薄グラフでは隣接ノード数が$O(1)$であるため、反跳項の寄与が正しく評価されず、アルゴリズムの収束性が保証されない。
+また、SBMでは隣接行列の各行の和（次数）が確率変数であり、
+行間で大きなばらつきを持つ。このような構造を持つ行列に対しては、AMPの状態発展方程式が
+正しい性能予測を与えない。
+
+\subsubsection{希薄グラフに対する手法の適合性}
+
+BPはグラフ構造を直接扱っており、希薄なグラフにおいて良い近似を得ることができる。ただし、相転移点近傍では理論的保証がなく、実用的な収束判定が必要。状態発展法はAMPの漸近理論として導出されるが、SBMに対しては独立に理論的予測として機能する。
+状態発展方程式はグラフの疎密によらず、統計的な観点から相転移を正確に予測できる。
+一方AMPはDense行列を前提とした導出であるため、希薄グラフには不向きである。
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.5\linewidth]{output.png}
+    \caption{SBMにおけるBP、AMP、状態発展法の性能比較。
+    横軸は信号対雑音比（SNR）を表し、縦軸は推定精度（重なり）を示す。
+    BPと状態発展法は相転移を捉えているが、BPは相転移点近傍で不安定性を示す。
+    AMPは希薄グラフ構造に起因して、ほとんど機能していない。}
+    \label{fig:sbm_comparison}
+\end{figure}
+\lstinputlisting[language=Python, caption=SBM解析]{gemini.py}
+
+\begin{thebibliography}{99}
+
+\bibitem{MPV87}
+M.~Mézard, G.~Parisi, and M.~A.~Virasoro,
+\textit{Spin Glass Theory and Beyond},
+World Scientific (1987).
+
+\bibitem{MM09}
+M.~Mézard and A.~Montanari,
+\textit{Information, Physics, and Computation},
+Oxford University Press (2009).
+
+\bibitem{SK75}
+D.~Sherrington and S.~Kirkpatrick,
+Phys.\ Rev.\ Lett.\ \textbf{35}, 1792 (1975).
+
+\bibitem{TAP77}
+D.~J.~Thouless, P.~W.~Anderson, and R.~G.~Palmer,
+Phil.\ Mag.\ \textbf{35}, 593 (1977).
+
+\bibitem{DMM09}
+D.~L.~Donoho, A.~Maleki, and A.~Montanari,
+Proc.\ Natl.\ Acad.\ Sci.\ USA \textbf{106}, 18914 (2009).
+
+\bibitem{Decelle11}
+A.~Decelle \textit{et al.},
+Phys.\ Rev.\ E \textbf{84}, 066106 (2011).
+
+\end{thebibliography}
+
+\end{document}
